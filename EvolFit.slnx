@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EvolFit.Api/EvolFit.Api.csproj" />
+    <Project Path="src/EvolFit.Application/EvolFit.Application.csproj" />
+    <Project Path="src/EvolFit.Core/EvolFit.Core.csproj" />
+    <Project Path="src/EvolFit.Infrastructure/EvolFit.Infrastructure.csproj" />
+    <Project Path="src/EvolFit.Migrations/EvolFit.Migrations.csproj" />
+  </Folder>
+</Solution>
