@@ -1,10 +1,15 @@
+using System.Text;
+using EvolFit.Api.Filters;
+using EvolFit.Api.Middlewares;
+using EvolFit.Application;
+using EvolFit.Infrastructure;
+using EvolFit.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 using Serilog;
 
-// ============================================================
-// Bootstrap do Serilog (antes do host iniciar)
-// ============================================================
-// Log.Logger é temporário — será substituído pelo logger
-// configurado a partir do appsettings.json quando o host iniciar.
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateBootstrapLogger();
@@ -15,9 +20,6 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
-    // ========================================================
-    // Serilog: lê configuração de appsettings.json + enrichers
-    // ========================================================
     builder.Host.UseSerilog((context, services, configuration) => configuration
         .ReadFrom.Configuration(context.Configuration)
         .ReadFrom.Services(services)
@@ -31,41 +33,87 @@ try
             serverUrl: context.Configuration["Seq:ServerUrl"] ?? "http://localhost:5341",
             apiKey: context.Configuration["Seq:ApiKey"]));
 
-    // ========================================================
-    // Controllers
-    // ========================================================
-    builder.Services.AddControllers();
+    // ---------- DI ----------
+    builder.Services.AddApplication();
+    builder.Services.AddInfrastructure(builder.Configuration);
 
-    // ========================================================
-    // OpenAPI nativo do .NET 10 (usado apenas para gerar o
-    // documento consumido pelo Scalar — não expõe Swagger UI)
-    // ========================================================
-    builder.Services.AddOpenApi();
+    builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<ValidationFilter>();
+    });
 
-    // ========================================================
-    // Health Checks
-    // ========================================================
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddOpenApi(options =>
+    {
+        options.AddDocumentTransformer((document, context, ct) =>
+        {
+            document.Components ??= new OpenApiComponents();
+            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+            document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                Description = "Cole apenas o token (sem 'Bearer ')."
+            };
+            return Task.CompletedTask;
+        });
+    });
+
+    // ---------- JWT ----------
+    var jwtSection = builder.Configuration.GetSection("Jwt");
+    var secret = jwtSection["Secret"]
+        ?? throw new InvalidOperationException("Jwt:Secret não configurado.");
+
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwtSection["Issuer"],
+                ValidAudience = jwtSection["Audience"],
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret)),
+                ClockSkew = TimeSpan.FromSeconds(30)
+            };
+        });
+
+    builder.Services.AddAuthorization();
     builder.Services.AddHealthChecks();
+
+    // ---------- CORS ----------
+    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+    });
 
     var app = builder.Build();
 
-    // ========================================================
-    // Pipeline HTTP
-    // ========================================================
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
     {
-        // Documento OpenAPI em /openapi/v1.json
         app.MapOpenApi();
+        app.MapScalarApiReference();
     }
 
     app.UseHttpsRedirection();
+    app.UseCors();
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();
-
-    // Endpoint simples de liveness (readiness virá no Bloco 7)
     app.MapHealthChecks("/health");
 
     app.Run();

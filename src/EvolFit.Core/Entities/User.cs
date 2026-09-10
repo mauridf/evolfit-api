@@ -18,6 +18,7 @@ public class User
     public ICollection<HealthMetric> HealthMetrics { get; private set; } = new List<HealthMetric>();
     public ICollection<WorkoutRoutine> WorkoutRoutines { get; private set; } = new List<WorkoutRoutine>();
     public ICollection<ExerciseLog> ExerciseLogs { get; private set; } = new List<ExerciseLog>();
+    public ICollection<RefreshToken> RefreshTokens { get; private set; } = new List<RefreshToken>();
 
     // Construtor privado para EF Core
     private User() { }
