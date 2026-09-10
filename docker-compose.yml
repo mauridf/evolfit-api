@@ -1,0 +1,55 @@
+# ============================================================
+# EvolFit — Docker Compose (ambiente de desenvolvimento)
+# ============================================================
+# Serviços:
+#   - postgres : banco de dados principal (PostgreSQL 16)
+#   - seq      : visualizador de logs estruturados (Serilog sink)
+#
+# Uso:
+#   docker compose up -d      # sobe tudo em background
+#   docker compose down       # para tudo (mantém volumes)
+#   docker compose down -v    # para tudo E apaga volumes (reset total)
+#   docker compose logs -f    # acompanha logs
+# ============================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: evolfit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolfit
+      POSTGRES_PASSWORD: evolfit_dev_password
+      POSTGRES_DB: evolfit_dev
+      # Força UTF-8 e timezone padrão
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+      TZ: America/Sao_Paulo
+    ports:
+      - "5432:5432"
+    volumes:
+      - evolfit_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolfit -d evolfit_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  seq:
+    image: datalust/seq:latest
+    container_name: evolfit-seq
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      # Habilita autenticação simples (trocar em produção)
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
+    ports:
+      - "5341:80"   # UI web em http://localhost:5341
+    volumes:
+      - evolfit_seq_data:/data
+
+volumes:
+  evolfit_postgres_data:
+    name: evolfit_postgres_data
+  evolfit_seq_data:
+    name: evolfit_seq_data
