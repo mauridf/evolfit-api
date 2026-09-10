@@ -1,10 +1,31 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>EvolFit.Migrations</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Scripts SQL da pasta ../../db/migrations embutidos como recursos -->
+        <EmbeddedResource Include="..\..\db\migrations\*.sql">
+            <LogicalName>EvolFit.Migrations.Scripts.%(Filename)%(Extension)</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="dbup-postgresql" Version="6.*" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.*" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.*" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Copia o appsettings.json da API para a pasta do migrations -->
+        <None Include="..\EvolFit.Api\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\EvolFit.Api\appsettings.Development.json" Link="appsettings.Development.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\EvolFit.Api\appsettings.Development.json')" />
+    </ItemGroup>
 
 </Project>
