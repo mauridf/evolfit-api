@@ -5,6 +5,15 @@
     <ProjectReference Include="..\EvolFit.Core\EvolFit.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Caching\" />
+    <Folder Include="Data\Configurations\" />
+    <Folder Include="Data\Context\" />
+    <Folder Include="Data\Repositories\" />
+    <Folder Include="ExternalServices\" />
+    <Folder Include="Security\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
