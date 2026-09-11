@@ -6,4 +6,8 @@
     <Project Path="src/EvolFit.Infrastructure/EvolFit.Infrastructure.csproj" />
     <Project Path="src/EvolFit.Migrations/EvolFit.Migrations.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EvolFit.IntegrationTests/EvolFit.IntegrationTests.csproj" />
+    <Project Path="tests/EvolFit.UnitTests/EvolFit.UnitTests.csproj" />
+  </Folder>
 </Solution>
