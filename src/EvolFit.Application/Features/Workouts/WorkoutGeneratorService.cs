@@ -1,3 +1,4 @@
+using System.Text.Json;
 using EvolFit.Application.Features.Wger.DTOs;
 using EvolFit.Application.Features.Wger.Interfaces;
 using EvolFit.Application.Features.Workouts.DTOs;
@@ -21,15 +22,19 @@ public interface IWorkoutGeneratorService
 public class WorkoutGeneratorService : IWorkoutGeneratorService
 {
     private const int ExercisesPerDay = 3;
-    private const int DefaultSets = 3;
-    private const int DefaultReps = 10;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromDays(7);
 
     private readonly IWgerExerciseClient _wger;
+    private readonly IWgerExerciseCacheRepository _cache;
     private readonly ILogger<WorkoutGeneratorService> _logger;
 
-    public WorkoutGeneratorService(IWgerExerciseClient wger, ILogger<WorkoutGeneratorService> logger)
+    public WorkoutGeneratorService(
+        IWgerExerciseClient wger,
+        IWgerExerciseCacheRepository cache,
+        ILogger<WorkoutGeneratorService> logger)
     {
         _wger = wger;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -41,6 +46,7 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
             .ToList();
 
         var goal = GoalExtensions.FromApiValue(request.Goal);
+        var difficulty = DifficultyExtensions.FromApiValue(request.Difficulty);
         var startDate = DateOnly.FromDateTime(DateTime.UtcNow);
 
         // 1. Cria a rotina (validação de período está na entidade)
@@ -56,6 +62,10 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
             {
                 var exercises = await _wger.GetExercisesByMuscleAsync(muscleId, ct);
                 allExercises.AddRange(exercises);
+
+                // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
+                foreach (var exercise in exercises)
+                    await UpsertCacheAsync(exercise, ct);
             }
             catch (Exception ex)
             {
@@ -73,10 +83,13 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
             throw new InvalidOperationException(
                 "Não foi possível obter exercícios da wger. Tente novamente mais tarde (WGR-004).");
 
-        _logger.LogInformation("Gerando rotina com {Count} exercícios únicos distribuídos em {Days} dias",
-            allExercises.Count, request.PeriodDays);
+        _logger.LogInformation("Gerando rotina {Difficulty} com {Count} exercícios únicos distribuídos em {Days} dias",
+            difficulty, allExercises.Count, request.PeriodDays);
 
-        // 4. Distribui exercícios entre os dias (round-robin)
+        // 4. Prescrição de séries/repetições conforme a dificuldade
+        var (sets, reps) = PrescribeByDifficulty(difficulty);
+
+        // 5. Distribui exercícios entre os dias (round-robin)
         var workoutExercises = new List<WorkoutExercise>();
         var index = 0;
 
@@ -91,8 +104,8 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
                 dayNumber: day,
                 wgerExerciseId: picked.Id,
                 exerciseName: picked.Name,
-                sets: DefaultSets,
-                reps: DefaultReps,
+                sets: sets,
+                reps: reps,
                 orderInDay: slot);
 
                 workoutExercises.Add(exercise);
@@ -101,4 +114,45 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
 
         return (routine, workoutExercises);
     }
+
+    private async Task UpsertCacheAsync(ExerciseListItemDto item, CancellationToken ct)
+    {
+        var musclesJson = JsonSerializer.Serialize(item.Muscles);
+        var equipmentJson = JsonSerializer.Serialize(item.Equipment);
+
+        var cached = await _cache.GetByWgerIdAsync(item.Id, ct);
+
+        if (cached is null)
+        {
+            await _cache.AddAsync(WgerExerciseCache.Create(
+                item.Id,
+                item.Name,
+                item.Description,
+                item.Category,
+                musclesJson,
+                equipmentJson,
+                imagesJson: null,
+                CacheTtl), ct);
+        }
+        else if (cached.IsExpired)
+        {
+            cached.Refresh(
+                item.Name,
+                item.Description,
+                item.Category,
+                musclesJson,
+                equipmentJson,
+                imagesJson: null,
+                CacheTtl);
+            _cache.Update(cached);
+        }
+    }
+
+    private static (int Sets, int Reps) PrescribeByDifficulty(Difficulty difficulty) => difficulty switch
+    {
+        Difficulty.Beginner => (Sets: 3, Reps: 8),
+        Difficulty.Intermediate => (Sets: 3, Reps: 10),
+        Difficulty.Advanced => (Sets: 4, Reps: 12),
+        _ => (Sets: 3, Reps: 10)
+    };
 }

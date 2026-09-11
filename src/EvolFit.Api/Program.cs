@@ -41,6 +41,7 @@ try
     // ---------- DI ----------
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddEvolFitRateLimiting();
 
     builder.Services.AddControllers(options =>
     {
@@ -115,6 +116,7 @@ try
 
     app.UseHttpsRedirection();
     app.UseCors();
+    app.UseRateLimiter();
     app.UseAuthentication();
     app.UseAuthorization();
 

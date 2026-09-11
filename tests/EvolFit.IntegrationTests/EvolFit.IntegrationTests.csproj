@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\EvolFit.Api\EvolFit.Api.csproj" />
     <ProjectReference Include="..\..\src\EvolFit.Infrastructure\EvolFit.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\EvolFit.Migrations\EvolFit.Migrations.csproj" />
   </ItemGroup>
 
 </Project>

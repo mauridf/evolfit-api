@@ -109,6 +109,16 @@ graph TB
 
 `ExternalApis:TinyFn:ApiKey` deve ser informada via variável de ambiente ou appsettings (ver SECURITY.md).
 
+Em **desenvolvimento**, os segredos (`Jwt:Secret`, `ExternalApis:TinyFn:ApiKey`) ficam em *User Secrets* (não versionados). Configure-os com:
+
+```bash
+cd src/EvolFit.Api
+dotnet user-secrets set "Jwt:Secret" "sua-chave-criptográfica"
+dotnet user-secrets set "ExternalApis:TinyFn:ApiKey" "sua-chave"
+```
+
+Em **produção**, use variáveis de ambiente (`Jwt__Secret`, `ExternalApis__TinyFn__ApiKey` — ver `render.yaml`).
+
 ### 2. Suba a infraestrutura
 
 ```bash

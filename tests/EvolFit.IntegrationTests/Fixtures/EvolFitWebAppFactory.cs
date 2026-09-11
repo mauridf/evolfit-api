@@ -1,3 +1,4 @@
+using DbUp;
 using EvolFit.Infrastructure.Data.Context;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -19,6 +20,10 @@ public class EvolFitWebAppFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
 
+        // Segredos não vêm mais dos appsettings (SEC-002) — os testes fornecem os seus.
+        builder.UseSetting("Jwt:Secret",
+            "test_secret_evolfit_01234567890abcdef01234567890abcdef");
+
         builder.ConfigureServices(services =>
         {
             // Remove DbContext registrado e substitui pela connection do Testcontainer
@@ -29,11 +34,18 @@ public class EvolFitWebAppFactory : WebApplicationFactory<Program>
             services.AddDbContext<EvolFitDbContext>(options =>
                 options.UseNpgsql(_connectionString));
 
-            // Cria o schema
-            using var sp = services.BuildServiceProvider();
-            using var scope = sp.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<EvolFitDbContext>();
-            db.Database.EnsureCreated();
+            // Cria o schema com as migrations reais (DbUp), não com EnsureCreated
+            var result = DeployChanges.To
+                .PostgresqlDatabase(_connectionString)
+                .WithScriptsEmbeddedInAssembly(
+                    typeof(EvolFit.Migrations.MigrationAssemblyMarker).Assembly,
+                    s => s.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+                .WithTransactionPerScript()
+                .Build()
+                .PerformUpgrade();
+
+            if (!result.Successful)
+                throw new InvalidOperationException("Falha ao aplicar migrations DbUp", result.Error);
         });
     }
 }

@@ -104,7 +104,24 @@ public class DashboardService : IDashboardService
         var bmiData = metrics.Select(m => m.Bmi).ToList();
         var weightData = metrics.Select(m => m.WeightKg).ToList();
 
-        return new DashboardProgressResponse(labels, bmiData, weightData, TargetBmi: null);
+        // IMC alvo (DASH-005): limite saudável de 18.5–24.9.
+        // Peso atual estimado a partir da última métrica (ou da segunda mais recente).
+        var current = metrics.LastOrDefault()
+            ?? (metrics.Count >= 2 ? metrics[metrics.Count - 2] : null);
+
+        decimal? targetBmi = null;
+        if (current is not null)
+        {
+            targetBmi = current.Bmi switch
+            {
+                > 24.9m => 24.9m,
+                < 18.5m => 18.5m,
+                _ => current.Bmi
+            };
+            targetBmi = Math.Round(targetBmi.Value, 1);
+        }
+
+        return new DashboardProgressResponse(labels, bmiData, weightData, targetBmi);
     }
 
     public async Task<DashboardComplianceResponse> GetComplianceAsync(
