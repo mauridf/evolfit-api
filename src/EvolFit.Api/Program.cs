@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Polly;
 using Scalar.AspNetCore;
 using Serilog;
 
@@ -131,6 +132,42 @@ try
         Predicate = check => check.Tags.Contains("ready"),
         ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
     });
+
+    // ============================================================
+    // Migrations no startup (opcional — pode ser desativado por env var)
+    // ============================================================
+    if (builder.Configuration.GetValue<bool>("RunMigrationsOnStartup"))
+    {
+        using var scope = app.Services.CreateScope();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        try
+        {
+            logger.LogInformation("Aplicando migrations DbUp...");
+
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
+            var upgrader = DbUp.DeployChanges.To
+                .PostgresqlDatabase(connectionString)
+                .WithScriptsEmbeddedInAssembly(
+                    typeof(EvolFit.Migrations.Program).Assembly,
+                    s => s.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+                .WithTransactionPerScript()
+                .LogToConsole()
+                .Build();
+
+            var result = upgrader.PerformUpgrade();
+            if (!result.Successful)
+            {
+                logger.LogError(result.Error, "Falha ao aplicar migrations");
+                throw result.Error;
+            }
+            logger.LogInformation("Migrations aplicadas com sucesso.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Falha crítica ao aplicar migrations.");
+            throw;
+        }
+    }
 
     app.Run();
 }

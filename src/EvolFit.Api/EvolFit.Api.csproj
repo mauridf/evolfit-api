@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\EvolFit.Application\EvolFit.Application.csproj" />
     <ProjectReference Include="..\EvolFit.Infrastructure\EvolFit.Infrastructure.csproj" />
+    <ProjectReference Include="..\EvolFit.Migrations\EvolFit.Migrations.csproj" />
   </ItemGroup>
 
   <ItemGroup>
