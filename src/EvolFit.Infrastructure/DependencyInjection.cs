@@ -60,6 +60,13 @@ public static class DependencyInjection
         // HTTP clients externos (TinyFn + Polly)
         services.AddExternalHttpClients(configuration);
 
+        // Health checks
+        services.AddHealthChecks()
+            .AddNpgSql(
+                connectionString: configuration.GetConnectionString("DefaultConnection")!,
+                name: "postgres",
+                tags: new[] { "db", "ready" });
+
         return services;
     }
 }

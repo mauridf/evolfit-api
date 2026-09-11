@@ -1,10 +1,13 @@
 using System.Text;
+using EvolFit.Api.Extensions;
 using EvolFit.Api.Filters;
 using EvolFit.Api.Middlewares;
 using EvolFit.Application;
 using EvolFit.Infrastructure;
 using EvolFit.Infrastructure.Security;
+using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Scalar.AspNetCore;
@@ -113,8 +116,21 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
 
-    app.MapControllers();
-    app.MapHealthChecks("/health");
+    app.MapControllers()
+   .RequireRateLimiting(RateLimitingExtensions.AuthenticatedPolicy);
+
+    // ---------- Health Checks ----------
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        Predicate = _ => false, // liveness puro
+        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    });
+
+    app.MapHealthChecks("/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    });
 
     app.Run();
 }
