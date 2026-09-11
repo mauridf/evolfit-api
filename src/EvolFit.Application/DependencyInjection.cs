@@ -1,4 +1,5 @@
 using EvolFit.Application.Features.Auth;
+using EvolFit.Application.Features.Health;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,6 +11,9 @@ public static class DependencyInjection
     {
         // Auth
         services.AddScoped<IAuthService, AuthService>();
+
+        // Health
+        services.AddScoped<IHealthService, HealthService>();
 
         // FluentValidation
         services.AddValidatorsFromAssemblyContaining<AuthService>();

@@ -1,9 +1,13 @@
 using EvolFit.Application.Common;
 using EvolFit.Application.Features.Auth;
 using EvolFit.Application.Features.Auth.Interfaces;
+using EvolFit.Application.Features.Health.Interfaces;
+using EvolFit.Application.Features.TinyFn.Interfaces;
+using EvolFit.Infrastructure.Caching;
 using EvolFit.Infrastructure.Data;
 using EvolFit.Infrastructure.Data.Context;
 using EvolFit.Infrastructure.Data.Repositories;
+using EvolFit.Infrastructure.ExternalServices;
 using EvolFit.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,22 +31,28 @@ public static class DependencyInjection
         {
             options.RefreshTokenExpireDays =
                 int.TryParse(configuration["Jwt:RefreshTokenExpireDays"], out var days) ? days : 7;
-            options.ExpireMinutes =
-                int.TryParse(configuration["Jwt:ExpireMinutes"], out var minutes) ? minutes : 120;
         });
 
         // Repositórios
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IHealthMetricRepository, HealthMetricRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Segurança
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
 
-        // Current user (usa IHttpContextAccessor)
+        // Current user
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+        // Cache
+        services.AddMemoryCache();
+        services.AddSingleton<ITinyFnCache, MemoryTinyFnCache>();
+
+        // HTTP clients externos (TinyFn + Polly)
+        services.AddExternalHttpClients(configuration);
 
         return services;
     }
