@@ -1,4 +1,5 @@
 using EvolFit.Application.Features.Auth;
+using EvolFit.Application.Features.Dashboard;
 using EvolFit.Application.Features.Health;
 using EvolFit.Application.Features.Workouts;
 using FluentValidation;
@@ -14,6 +15,7 @@ public static class DependencyInjection
         services.AddScoped<IHealthService, HealthService>();
         services.AddScoped<IWorkoutService, WorkoutService>();
         services.AddScoped<IWorkoutGeneratorService, WorkoutGeneratorService>();
+        services.AddScoped<IDashboardService, DashboardService>();
 
         services.AddValidatorsFromAssemblyContaining<AuthService>();
         return services;
