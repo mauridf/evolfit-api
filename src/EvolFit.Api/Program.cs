@@ -1,4 +1,5 @@
 using System.Text;
+using DbUp;
 using EvolFit.Api.Extensions;
 using EvolFit.Api.Filters;
 using EvolFit.Api.Middlewares;
@@ -147,8 +148,8 @@ try
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
             var upgrader = DbUp.DeployChanges.To
                 .PostgresqlDatabase(connectionString)
-                .WithScriptsEmbeddedInAssembly(
-                    typeof(EvolFit.Migrations.Program).Assembly,
+.WithScriptsEmbeddedInAssembly(
+                    typeof(EvolFit.Migrations.MigrationAssemblyMarker).Assembly,
                     s => s.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
                 .WithTransactionPerScript()
                 .LogToConsole()
