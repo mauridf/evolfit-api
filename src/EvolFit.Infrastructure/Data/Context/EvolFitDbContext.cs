@@ -13,6 +13,7 @@ public class EvolFitDbContext : DbContext
     public DbSet<WorkoutRoutine> WorkoutRoutines => Set<WorkoutRoutine>();
     public DbSet<WorkoutExercise> WorkoutExercises => Set<WorkoutExercise>();
     public DbSet<ExerciseLog> ExerciseLogs => Set<ExerciseLog>();
+    public DbSet<WgerExerciseCache> WgerExercisesCache => Set<WgerExerciseCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

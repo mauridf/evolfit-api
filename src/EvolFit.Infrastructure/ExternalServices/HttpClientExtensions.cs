@@ -37,6 +37,28 @@ public static class HttpClientExtensions
             .AddPolicyHandler(GetRetryPolicy())
             .AddPolicyHandler(GetCircuitBreakerPolicy());
 
+        // ---------- wger ----------
+        services.Configure<EvolFit.Infrastructure.ExternalServices.Wger.WgerOptions>(
+            configuration.GetSection("ExternalApis:Wger"));
+
+        services
+            .AddHttpClient<EvolFit.Application.Features.Wger.Interfaces.IWgerExerciseClient,
+                EvolFit.Infrastructure.ExternalServices.Wger.WgerExerciseClient>((sp, client) =>
+                {
+                    var opts = sp.GetRequiredService<
+                Microsoft.Extensions.Options.IOptions<
+                    EvolFit.Infrastructure.ExternalServices.Wger.WgerOptions>>().Value;
+
+                    client.BaseAddress = new Uri(opts.BaseUrl);
+                    client.Timeout = TimeSpan.FromSeconds(opts.TimeOutSeconds);
+
+                    client.DefaultRequestHeaders.Add("User-Agent", "EvolFit/1.0");
+                    client.DefaultRequestHeaders.Accept.Add(
+                new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+                })
+            .AddPolicyHandler(GetRetryPolicy())
+            .AddPolicyHandler(GetCircuitBreakerPolicy());
+
         return services;
     }
 

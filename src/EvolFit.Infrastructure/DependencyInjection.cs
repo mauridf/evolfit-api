@@ -3,6 +3,8 @@ using EvolFit.Application.Features.Auth;
 using EvolFit.Application.Features.Auth.Interfaces;
 using EvolFit.Application.Features.Health.Interfaces;
 using EvolFit.Application.Features.TinyFn.Interfaces;
+using EvolFit.Application.Features.Wger.Interfaces;
+using EvolFit.Application.Features.Workouts.Interfaces;
 using EvolFit.Infrastructure.Caching;
 using EvolFit.Infrastructure.Data;
 using EvolFit.Infrastructure.Data.Context;
@@ -37,6 +39,10 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IHealthMetricRepository, HealthMetricRepository>();
+        services.AddScoped<IWorkoutRoutineRepository, WorkoutRoutineRepository>();
+        services.AddScoped<IWorkoutExerciseRepository, WorkoutExerciseRepository>();
+        services.AddScoped<IExerciseLogRepository, ExerciseLogRepository>();
+        services.AddScoped<IWgerExerciseCacheRepository, WgerExerciseCacheRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Segurança

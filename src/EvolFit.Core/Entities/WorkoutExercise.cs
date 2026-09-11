@@ -22,13 +22,12 @@ public class WorkoutExercise
     private WorkoutExercise() { }
 
     public static WorkoutExercise Create(
-        int workoutRoutineId,
-        int dayNumber,
-        int wgerExerciseId,
-        string exerciseName,
-        int sets,
-        int reps,
-        int orderInDay)
+    int dayNumber,
+    int wgerExerciseId,
+    string exerciseName,
+    int sets,
+    int reps,
+    int orderInDay)
     {
         if (dayNumber is < 1 or > 180)
             throw new ArgumentOutOfRangeException(nameof(dayNumber));
@@ -44,7 +43,6 @@ public class WorkoutExercise
 
         return new WorkoutExercise
         {
-            WorkoutRoutineId = workoutRoutineId,
             DayNumber = dayNumber,
             WgerExerciseId = wgerExerciseId,
             ExerciseName = exerciseName.Trim(),
