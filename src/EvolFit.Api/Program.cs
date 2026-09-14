@@ -41,7 +41,7 @@ try
     // ---------- DI ----------
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddEvolFitRateLimiting();
+    builder.Services.AddEvolFitRateLimiting(builder.Configuration);
 
     builder.Services.AddControllers(options =>
     {

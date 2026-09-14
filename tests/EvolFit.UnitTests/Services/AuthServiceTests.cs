@@ -72,6 +72,76 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task Login_WithWrongPassword_IncrementsFailureCounter()
+    {
+        var user = CreateUserWithFailedLogins(2);
+        _users.GetByEmailAsync("c@e.com", Arg.Any<CancellationToken>()).Returns(user);
+        _hasher.Verify(Arg.Any<string>(), "hash").Returns(false);
+
+        var sut = BuildSut();
+        var act = () => sut.LoginAsync(new LoginRequest("c@e.com", "errado"));
+
+        await act.Should().ThrowAsync<UnauthorizedException>();
+        user.FailedLoginCount.Should().Be(3);
+        await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Login_FifthFailedAttempt_LocksOutAccount()
+    {
+        var user = CreateUserWithFailedLogins(4);
+        _users.GetByEmailAsync("c@e.com", Arg.Any<CancellationToken>()).Returns(user);
+        _hasher.Verify(Arg.Any<string>(), "hash").Returns(false);
+
+        var sut = BuildSut();
+        var act = () => sut.LoginAsync(new LoginRequest("c@e.com", "errado"));
+
+        await act.Should().ThrowAsync<UnauthorizedException>();
+        user.IsLockedOut(DateTime.UtcNow).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Login_WhenAccountLockedOut_ThrowsUnauthorized_WithoutCheckingPassword()
+    {
+        var user = CreateUserWithFailedLogins(5); // 5ª falha bloqueia a conta
+        _users.GetByEmailAsync("c@e.com", Arg.Any<CancellationToken>()).Returns(user);
+
+        var sut = BuildSut();
+        var act = () => sut.LoginAsync(
+            new LoginRequest("c@e.com", "senha-correta-mas-bloqueada"));
+
+        await act.Should().ThrowAsync<UnauthorizedException>();
+        _hasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string>());
+        await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Login_WithCorrectPassword_ResetsFailuresAndLockout()
+    {
+        var user = CreateUserWithFailedLogins(2);
+        _users.GetByEmailAsync("c@e.com", Arg.Any<CancellationToken>()).Returns(user);
+        _hasher.Verify("S3nh@F0rte!", "hash").Returns(true);
+        _tokens2.GenerateAccessToken(Arg.Any<int>(), Arg.Any<string>(), Arg.Any<string>()).Returns("access");
+        _tokens2.GenerateRefreshToken().Returns("refresh-plain");
+        _tokens2.HashRefreshToken("refresh-plain").Returns("refresh-hash");
+
+        var sut = BuildSut();
+        var result = await sut.LoginAsync(new LoginRequest("c@e.com", "S3nh@F0rte!"));
+
+        result.AccessToken.Should().Be("access");
+        user.FailedLoginCount.Should().Be(0);
+        user.LockoutUntil.Should().BeNull();
+    }
+
+    private static User CreateUserWithFailedLogins(int failures)
+    {
+        var user = User.Create("c", "c@e.com", "hash", "Carlos", null);
+        for (var i = 0; i < failures; i++)
+            user.RegisterFailedLogin(5, TimeSpan.FromMinutes(15));
+        return user;
+    }
+
+    [Fact]
     public async Task Refresh_WithRevokedToken_RevokesAllAndThrowsConflict()
     {
         var stored = RefreshToken.Create(1, "hash", DateTime.UtcNow.AddDays(1));

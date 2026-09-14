@@ -74,4 +74,34 @@ public class AuthIntegrationTests
         var r = await _client.PostAsJsonAsync("/api/auth/register", req);
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
+
+    [Fact]
+    public async Task Login_AfterFiveFailedAttempts_BlocksAccount()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"lock{suffix}@evolfit.test";
+        const string password = "S3nh@F0rte!";
+
+        var register = new RegisterRequest(
+            $"lock{suffix}", email, password, "Lock User", null);
+        var r0 = await _client.PostAsJsonAsync("/api/auth/register", register);
+        r0.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // 5 tentativas com senha errada → 401 (sem mensagem de bloqueio)
+        for (var i = 0; i < 5; i++)
+        {
+            var r = await _client.PostAsJsonAsync("/api/auth/login",
+                new LoginRequest(email, "senha-errada"));
+            r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            var body = await r.Content.ReadAsStringAsync();
+            body.Should().NotContain("bloquead");
+        }
+
+        // A 6ª tentativa, mesmo com a senha correta, é bloqueada (401 com aviso)
+        var blocked = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(email, password));
+        blocked.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var blockedBody = await blocked.Content.ReadAsStringAsync();
+        blockedBody.Should().Contain("bloquead");
+    }
 }

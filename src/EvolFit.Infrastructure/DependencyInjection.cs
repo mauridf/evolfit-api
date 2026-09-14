@@ -33,6 +33,10 @@ public static class DependencyInjection
         {
             options.RefreshTokenExpireDays =
                 int.TryParse(configuration["Jwt:RefreshTokenExpireDays"], out var days) ? days : 7;
+            options.MaxLoginAttempts =
+                int.TryParse(configuration["Auth:MaxLoginAttempts"], out var attempts) ? attempts : 5;
+            options.LockoutMinutes =
+                int.TryParse(configuration["Auth:LockoutMinutes"], out var minutes) ? minutes : 15;
         });
 
         // Repositórios

@@ -24,6 +24,10 @@ public class EvolFitWebAppFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Secret",
             "test_secret_evolfit_01234567890abcdef01234567890abcdef");
 
+        // Limites de rate limit altos p/ os fluxos de teste não colidirem com o 429
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "1000");
+        builder.UseSetting("RateLimiting:Authenticated:PermitLimit", "1000");
+
         builder.ConfigureServices(services =>
         {
             // Remove DbContext registrado e substitui pela connection do Testcontainer

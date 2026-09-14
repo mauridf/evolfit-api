@@ -29,6 +29,8 @@ public class AuthService : IAuthService
     // Injetado para configuração de expiração dos tokens
     private readonly int _refreshTokenExpireDays;
     private readonly int _accessTokenExpireSeconds;
+    private readonly int _maxLoginAttempts;
+    private readonly TimeSpan _lockoutDuration;
 
     public AuthService(
         IUserRepository users,
@@ -47,6 +49,8 @@ public class AuthService : IAuthService
         _currentUser = currentUser;
         _refreshTokenExpireDays = options.Value.RefreshTokenExpireDays;
         _accessTokenExpireSeconds = options.Value.ExpireMinutes * 60;
+        _maxLoginAttempts = options.Value.MaxLoginAttempts;
+        _lockoutDuration = TimeSpan.FromMinutes(options.Value.LockoutMinutes);
     }
 
     public async Task<RegisterResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
@@ -80,8 +84,24 @@ public class AuthService : IAuthService
         var user = await _users.GetByEmailAsync(request.Email, ct)
             ?? throw new UnauthorizedException("Credenciais inválidas.");
 
+        // SECURITY §7 — conta bloqueada após 5 falhas consecutivas (janela 15 min)
+        if (user.IsLockedOut(DateTime.UtcNow))
+            throw new UnauthorizedException(
+                "Conta temporariamente bloqueada por excesso de tentativas. Tente novamente em alguns minutos.");
+
         if (!_hasher.Verify(request.Password, user.PasswordHash))
+        {
+            user.RegisterFailedLogin(_maxLoginAttempts, _lockoutDuration);
+            _users.Update(user);
+            await _uow.SaveChangesAsync(ct);
+
             throw new UnauthorizedException("Credenciais inválidas.");
+        }
+
+        // Sucesso: zera contador e libera bloqueio
+        user.ResetFailedLogins();
+        _users.Update(user);
+        await _uow.SaveChangesAsync(ct);
 
         var accessToken = _tokenService.GenerateAccessToken(user.Id, user.Username, user.Email);
         var refreshToken = await IssueRefreshTokenAsync(user.Id, ct);
@@ -208,4 +228,6 @@ public class AuthOptions
 {
     public int RefreshTokenExpireDays { get; set; } = 7;
     public int ExpireMinutes { get; set; } = 120;
+    public int MaxLoginAttempts { get; set; } = 5;
+    public int LockoutMinutes { get; set; } = 15;
 }
