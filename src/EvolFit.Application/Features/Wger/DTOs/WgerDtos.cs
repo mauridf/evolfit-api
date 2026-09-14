@@ -6,12 +6,6 @@ public sealed record WgerExerciseSearchResult(
 
 public sealed record WgerExerciseSearchRaw(List<WgerExerciseSearchResult> Results);
 
-public sealed record WgerExerciseListItem(
-    int Id, string Name, string Description, string Category,
-    List<string> Muscles, List<string> Equipment);
-
-public sealed record WgerExerciseListRaw(List<WgerExerciseListItem> Results, int Count);
-
 public sealed record WgerExerciseDetailRaw(
     int Id, string Name, string Description, string Category,
     List<string> Muscles, List<string> Equipment, List<string> Images);

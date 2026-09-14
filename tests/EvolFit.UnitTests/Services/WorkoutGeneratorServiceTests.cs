@@ -64,7 +64,7 @@ public class WorkoutGeneratorServiceTests
     }
 
     [Theory]
-    [InlineData("beginner", 3, 8)]
+    [InlineData("beginner", 3, 10)]
     [InlineData("intermediate", 3, 10)]
     [InlineData("advanced", 4, 12)]
     public async Task Generate_ShouldApplyDifficultyPrescription(
@@ -108,5 +108,29 @@ public class WorkoutGeneratorServiceTests
         await _cache.Received(1).AddAsync(
             Arg.Is<WgerExerciseCache>(e => e.WgerExerciseId == 10),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Generate_WithCardio_ShouldQueryByCategory()
+    {
+        var list = new List<ExerciseListItemDto>
+        {
+            new(177, "Cycling", "desc", "Cardio", new(), new()),
+        };
+
+        _wger.GetExercisesByCategoryAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+             .Returns(list);
+
+        var sut = CreateSut();
+
+        var (_, exercises) = await sut.GenerateAsync(1, new GenerateWorkoutRequest(
+            "Treino Cardio", "cardio", 7, new List<string> { "cardio" }, "beginner"));
+
+        await _wger.Received(1).GetExercisesByCategoryAsync(
+            EvolFit.Application.Features.Workouts.Mappers.BodyPartMuscleMapper.CardioCategoryId,
+            Arg.Any<CancellationToken>());
+
+        exercises.Should().HaveCount(21); // 7 dias × 3 exercícios
+        exercises.Should().OnlyContain(e => e.ExerciseName == "Cycling");
     }
 }

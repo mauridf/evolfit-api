@@ -53,14 +53,17 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
         var routine = WorkoutRoutine.Create(userId, request.Name, goal, startDate, request.PeriodDays);
 
         // 2. Busca exercícios por parte do corpo
-        var muscleIds = BodyPartMuscleMapper.ToMuscleIds(bodyParts);
         var allExercises = new List<ExerciseListItemDto>();
 
-        foreach (var muscleId in muscleIds)
+        foreach (var part in bodyParts)
         {
             try
             {
-                var exercises = await _wger.GetExercisesByMuscleAsync(muscleId, ct);
+                // WGR-003: cardio não é músculo — usa a categoria 15 da wger.
+                IReadOnlyList<ExerciseListItemDto> exercises = part == BodyPart.Cardio
+                    ? await _wger.GetExercisesByCategoryAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
+                    : await _wger.GetExercisesByMuscleAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
+
                 allExercises.AddRange(exercises);
 
                 // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
@@ -69,7 +72,7 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Falha ao buscar exercícios para músculo {MuscleId}", muscleId);
+                _logger.LogWarning(ex, "Falha ao buscar exercícios para parte do corpo {BodyPart}", part);
             }
         }
 
@@ -150,7 +153,8 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
 
     private static (int Sets, int Reps) PrescribeByDifficulty(Difficulty difficulty) => difficulty switch
     {
-        Difficulty.Beginner => (Sets: 3, Reps: 8),
+        // Reps no padrão documentado (MASTER_SPEC §17.3): 10-12
+        Difficulty.Beginner => (Sets: 3, Reps: 10),
         Difficulty.Intermediate => (Sets: 3, Reps: 10),
         Difficulty.Advanced => (Sets: 4, Reps: 12),
         _ => (Sets: 3, Reps: 10)
