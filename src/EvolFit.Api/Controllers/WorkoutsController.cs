@@ -30,7 +30,7 @@ public class WorkoutsController : ControllerBase
     public async Task<IActionResult> List(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
-        [FromQuery] int? status = null,
+        [FromQuery] string? status = null,
         CancellationToken ct = default)
     {
         var result = await _service.ListAsync(page, pageSize, status, ct);

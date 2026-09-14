@@ -63,4 +63,15 @@ public class AuthIntegrationTests
             new RefreshRequest(login.RefreshToken));
         r5.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
+
+    [Fact]
+    public async Task Register_WithWeakPassword_ShouldReturn422()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var req = new RegisterRequest(
+            $"weak{suffix}", $"weak{suffix}@evolfit.test", "abc123", "Weak User", null);
+
+        var r = await _client.PostAsJsonAsync("/api/auth/register", req);
+        r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
 }

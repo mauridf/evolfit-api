@@ -13,7 +13,7 @@ public interface IWorkoutService
     Task<WorkoutRoutineGenerateResponse> GenerateAsync(
         GenerateWorkoutRequest request, CancellationToken ct = default);
     Task<PagedResponse<WorkoutRoutineListItem>> ListAsync(
-        int page, int pageSize, int? status, CancellationToken ct = default);
+        int page, int pageSize, string? status, CancellationToken ct = default);
     Task<WorkoutRoutineDetailResponse> GetByIdAsync(int id, CancellationToken ct = default);
     Task<WorkoutRoutineDetailResponse> UpdateStatusAsync(
         int id, UpdateWorkoutStatusRequest request, CancellationToken ct = default);
@@ -72,13 +72,13 @@ public class WorkoutService : IWorkoutService
     }
 
     public async Task<PagedResponse<WorkoutRoutineListItem>> ListAsync(
-        int page, int pageSize, int? status, CancellationToken ct = default)
+        int page, int pageSize, string? status, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
 
         var (items, total) = await _routines.GetPagedForUserAsync(
-            _currentUser.UserId, page, pageSize, status, ct);
+            _currentUser.UserId, page, pageSize, ParseStatusFilter(status), ct);
 
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
 
@@ -109,6 +109,17 @@ public class WorkoutService : IWorkoutService
             {
                 ["status"] = ["Status inválido. Use 0 (paused), 1 (active) ou 2 (completed)."]
             });
+
+        // RN-005: ativar uma rotina enquanto outra já está ativa violaria a
+        // invariante (índice único parcial V010) — detecta e responde 409.
+        if (request.Status == (int)WorkoutStatus.Active
+            && routine.Status != WorkoutStatus.Active)
+        {
+            var active = await _routines.GetActiveForUserAsync(_currentUser.UserId, ct);
+            if (active is not null)
+                throw new ConflictException(
+                    "Você já possui outra rotina ativa. Pause ou conclua a rotina ativa antes de ativar esta (RN-005).");
+        }
 
         routine.ChangeStatus((WorkoutStatus)request.Status);
         _routines.Update(routine);
@@ -235,6 +246,26 @@ public class WorkoutService : IWorkoutService
 
         _routines.Delete(routine);
         await _uow.SaveChangesAsync(ct);
+    }
+
+    // ---------- Helpers ----------
+    private static WorkoutStatus? ParseStatusFilter(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return null;
+
+        if (Enum.TryParse<WorkoutStatus>(status, ignoreCase: true, out var parsed)
+            && Enum.IsDefined(typeof(WorkoutStatus), parsed))
+            return parsed;
+
+        if (int.TryParse(status, out var numeric)
+            && Enum.IsDefined(typeof(WorkoutStatus), numeric))
+            return (WorkoutStatus)numeric;
+
+        throw new Common.Exceptions.ValidationException(new Dictionary<string, string[]>
+        {
+            ["status"] = ["Status inválido. Use 'active', 'paused' ou 'completed'."]
+        });
     }
 
     // ---------- Mappers ----------

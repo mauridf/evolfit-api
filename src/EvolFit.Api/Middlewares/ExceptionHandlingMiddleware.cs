@@ -23,8 +23,8 @@ public class ExceptionHandlingMiddleware
         }
         catch (ValidationException ex)
         {
-            await WriteProblemDetails(context, StatusCodes.Status400BadRequest,
-                "Validation Error", ex.Message, ex.ErrorCode, ex.Errors);
+            await WriteProblemDetails(context, StatusCodes.Status422UnprocessableEntity,
+                "Validação de negócio", ex.Message, ex.ErrorCode, ex.Errors);
         }
         catch (AppException ex)
         {

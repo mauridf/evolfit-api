@@ -16,6 +16,9 @@ public class HealthMetric
     public int? Bmr { get; private set; }
     public int? Tdee { get; private set; }
     public ActivityLevel? ActivityLevel { get; private set; }
+    public int? ProteinG { get; private set; }
+    public int? CarbsG { get; private set; }
+    public int? FatG { get; private set; }
     public DateTime MeasuredAt { get; private set; }
 
     // Navegação
@@ -34,7 +37,10 @@ public class HealthMetric
         decimal bmi,
         int? bmr,
         int? tdee,
-        ActivityLevel? activityLevel)
+        ActivityLevel? activityLevel,
+        int? proteinG = null,
+        int? carbsG = null,
+        int? fatG = null)
     {
         if (heightCm is < 100 or > 250)
             throw new ArgumentOutOfRangeException(nameof(heightCm),
@@ -53,6 +59,9 @@ public class HealthMetric
             Bmr = bmr,
             Tdee = tdee,
             ActivityLevel = activityLevel,
+            ProteinG = proteinG,
+            CarbsG = carbsG,
+            FatG = fatG,
             MeasuredAt = DateTime.UtcNow
         };
     }
