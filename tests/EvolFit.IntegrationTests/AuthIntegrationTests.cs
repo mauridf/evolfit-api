@@ -104,4 +104,56 @@ public class AuthIntegrationTests
         var blockedBody = await blocked.Content.ReadAsStringAsync();
         blockedBody.Should().Contain("bloquead");
     }
+
+    [Fact]
+    public async Task PublicResponse_ShouldIncludeSecurityHeaders()
+    {
+        var r = await _client.GetAsync("/health");
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        AssertSecurityHeaders(r);
+    }
+
+    [Fact]
+    public async Task AuthenticatedResponse_ShouldHaveNoStoreAndSecurityHeaders()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var register = new RegisterRequest(
+            $"hdr{suffix}", $"hdr{suffix}@evolfit.test", "S3nh@F0rte!", "Header User", null);
+        var r0 = await _client.PostAsJsonAsync("/api/auth/register", register);
+        r0.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var login = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(register.Email, "S3nh@F0rte!"));
+        var token = (await login.Content.ReadFromJsonAsync<LoginResponse>())!.AccessToken;
+
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var r = await _client.GetAsync("/api/auth/profile");
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        AssertSecurityHeaders(r);
+        r.Headers.CacheControl.Should().NotBeNull();
+        r.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    private static void AssertSecurityHeaders(HttpResponseMessage response)
+    {
+        response.Headers.TryGetValues("X-Content-Type-Options", out var xcto).Should().BeTrue();
+        xcto!.Should().Contain("nosniff");
+
+        response.Headers.TryGetValues("X-Frame-Options", out var xfo).Should().BeTrue();
+        xfo!.Should().Contain("DENY");
+
+        response.Headers.TryGetValues("Referrer-Policy", out var rp).Should().BeTrue();
+        rp!.Should().Contain("strict-origin-when-cross-origin");
+
+        response.Headers.TryGetValues("Permissions-Policy", out var pp).Should().BeTrue();
+        pp!.Should().Contain("camera=(), microphone=(), geolocation=()");
+
+        response.Headers.TryGetValues("Content-Security-Policy", out var csp).Should().BeTrue();
+        csp!.Should().Contain("default-src 'self'");
+    }
 }

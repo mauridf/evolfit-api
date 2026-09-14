@@ -91,6 +91,13 @@ try
     builder.Services.AddAuthorization();
     builder.Services.AddHealthChecks();
 
+    // SECURITY §5 — HSTS (31536000s = 1 ano, includeSubDomains)
+    builder.Services.AddHsts(options =>
+    {
+        options.MaxAge = TimeSpan.FromSeconds(31536000);
+        options.IncludeSubDomains = true;
+    });
+
     // ---------- CORS ----------
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
     builder.Services.AddCors(options =>
@@ -105,6 +112,8 @@ try
 
     var app = builder.Build();
 
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+    app.UseHsts();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseSerilogRequestLogging();
 
