@@ -1,0 +1,63 @@
+# ============================================================
+# EvolFit — Render Blueprint
+# ============================================================
+# Provisiona:
+#   - evolfit-db    : PostgreSQL gerenciado
+#   - evolfit-api   : Web Service Docker (staging)
+#
+# Uso:
+#   1. Conectar o repositório no painel do Render
+#   2. O Render lê este arquivo e provisiona tudo
+#   3. Preencher os "sync: false" no painel (segredos)
+# ============================================================
+
+services:
+  - type: web
+    name: evolfit-api
+    runtime: docker
+    plan: starter          # troque para "free" para testar, "standard" em produção
+    region: oregon         # escolha a região mais próxima (ex: ohio, virginia)
+    branch: main           # deploy de produção a partir de main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:10000
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: evolfit-db
+          property: connectionString
+      - key: Jwt__Secret
+        sync: false        # preencher manualmente (segredo)
+      - key: Jwt__Issuer
+        value: EvolFit
+      - key: Jwt__Audience
+        value: evolfit-api
+      - key: Jwt__ExpireMinutes
+        value: "120"
+      - key: Jwt__RefreshTokenExpireDays
+        value: "7"
+      - key: ExternalApis__TinyFn__ApiKey
+        sync: false        # preencher manualmente (sua chave real)
+      - key: ExternalApis__TinyFn__BaseUrl
+        value: https://api.tinyfn.io/v1/health/
+      - key: ExternalApis__Wger__BaseUrl
+        value: https://wger.de/api/v2/
+      - key: ExternalApis__Wger__Language
+        value: "2"
+      - key: Cors__AllowedOrigins__0
+        value: ""          # adicionar domínio do frontend quando existir
+      - key: Seq__ServerUrl
+        value: ""          # deixe vazio em produção (sem Seq self-hosted)
+
+databases:
+  - name: evolfit-db
+    plan: starter          # trocar para "free" se estiver testando
+    region: oregon
+    postgresMajorVersion: "16"
+    databaseName: evolfit
+    user: evolfit
