@@ -57,23 +57,20 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
 
         foreach (var part in bodyParts)
         {
+            IReadOnlyList<ExerciseListItemDto> exercises;
             try
             {
-                // WGR-003: cardio não é músculo — usa a categoria 15 da wger.
-                IReadOnlyList<ExerciseListItemDto> exercises = part == BodyPart.Cardio
-                    ? await _wger.GetExercisesByCategoryAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
-                    : await _wger.GetExercisesByMuscleAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
-
-                allExercises.AddRange(exercises);
-
-                // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
-                foreach (var exercise in exercises)
-                    await UpsertCacheAsync(exercise, ct);
+                exercises = await FetchForBodyPartAsync(part, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Falha ao buscar exercícios para parte do corpo {BodyPart}", part);
+                // WGR-005: em caso de erro da wger, cai no cache local.
+                _logger.LogWarning(ex,
+                    "WGR-005: wger falhou para {BodyPart}; usando cache local", part);
+                exercises = await LoadFromCacheAsync(part, ct);
             }
+
+            allExercises.AddRange(exercises);
         }
 
         // 3. Remove duplicatas por Id
@@ -118,7 +115,68 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
         return (routine, workoutExercises);
     }
 
-    private async Task UpsertCacheAsync(ExerciseListItemDto item, CancellationToken ct)
+    private async Task<IReadOnlyList<ExerciseListItemDto>> FetchForBodyPartAsync(
+        BodyPart part, CancellationToken ct)
+    {
+        // WGR-003: cardio não é músculo — usa a categoria 15 da wger.
+        IReadOnlyList<ExerciseListItemDto> exercises = part == BodyPart.Cardio
+            ? await _wger.GetExercisesByCategoryAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
+            : await _wger.GetExercisesByMuscleAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
+
+        // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
+        foreach (var exercise in exercises)
+            await UpsertCacheAsync(
+                exercise,
+                muscleId: part == BodyPart.Cardio ? null : BodyPartMuscleMapper.ToMuscleId(part),
+                categoryId: part == BodyPart.Cardio ? BodyPartMuscleMapper.CardioCategoryId : null,
+                ct);
+
+        return exercises;
+    }
+
+    // WGR-005: fallback offline usa os exercícios em cache da mesma parte do corpo.
+    private async Task<IReadOnlyList<ExerciseListItemDto>> LoadFromCacheAsync(
+        BodyPart part, CancellationToken ct)
+    {
+        IReadOnlyList<WgerExerciseCache> cached = part == BodyPart.Cardio
+            ? await _cache.GetByCategoryIdAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
+            : await _cache.GetByMuscleIdAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
+
+        if (cached.Count > 0)
+        {
+            _logger.LogWarning("WGR-005: usando {Count} exercício(s) do cache para {BodyPart}",
+                cached.Count, part);
+        }
+
+        return cached
+            .Select(c => new ExerciseListItemDto(
+                c.WgerExerciseId,
+                c.Name,
+                c.Description ?? string.Empty,
+                c.Category ?? string.Empty,
+                DeserializeStrings(c.MusclesJson),
+                DeserializeStrings(c.EquipmentJson)))
+            .ToList();
+    }
+
+    private static List<string> DeserializeStrings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
+    }
+
+    private async Task UpsertCacheAsync(
+        ExerciseListItemDto item,
+        int? muscleId,
+        int? categoryId,
+        CancellationToken ct)
     {
         var musclesJson = JsonSerializer.Serialize(item.Muscles);
         var equipmentJson = JsonSerializer.Serialize(item.Equipment);
@@ -135,7 +193,9 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
                 musclesJson,
                 equipmentJson,
                 imagesJson: null,
-                CacheTtl), ct);
+                CacheTtl,
+                muscleId,
+                categoryId), ct);
         }
         else if (cached.IsExpired)
         {
@@ -146,7 +206,9 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
                 musclesJson,
                 equipmentJson,
                 imagesJson: null,
-                CacheTtl);
+                CacheTtl,
+                muscleId,
+                categoryId);
             _cache.Update(cached);
         }
     }
