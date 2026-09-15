@@ -1,9 +1,12 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
 using EvolFit.Application.Features.Auth.DTOs;
 using EvolFit.IntegrationTests.Fixtures;
 using FluentAssertions;
+using Microsoft.IdentityModel.Tokens;
 
 namespace EvolFit.IntegrationTests;
 
@@ -137,6 +140,83 @@ public class AuthIntegrationTests
         AssertSecurityHeaders(r);
         r.Headers.CacheControl.Should().NotBeNull();
         r.Headers.CacheControl!.NoStore.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ProtectedEndpoint_WithoutToken_ShouldReturn401()
+    {
+        var r = await _client.GetAsync("/api/workouts");
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ExpiredJwt_ShouldReturn401WithoutReissuing()
+    {
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", CreateExpiredToken());
+
+        var r = await _client.GetAsync("/api/auth/profile");
+        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var body = await r.Content.ReadAsStringAsync();
+        body.Should().NotContain("accessToken");
+    }
+
+    [Fact]
+    public async Task Responses_ShouldNeverExposeTinyFnApiKey()
+    {
+        const string sentinel = "SENTINEL-tinyfn-key-do-not-leak";
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var email = $"leak{suffix}@evolfit.test";
+
+        var register = new RegisterRequest(
+            $"leak{suffix}", email, "S3nh@F0rte!", "Leak User", null);
+        var r1 = await _client.PostAsJsonAsync("/api/auth/register", register);
+        (await r1.Content.ReadAsStringAsync())
+            .Should().NotContainEquivalentOf(sentinel);
+
+        var r2 = await _client.PostAsJsonAsync("/api/auth/login",
+            new LoginRequest(email, "S3nh@F0rte!"));
+        (await r2.Content.ReadAsStringAsync())
+            .Should().NotContainEquivalentOf(sentinel);
+
+        var token = (await r2.Content.ReadFromJsonAsync<LoginResponse>())!.AccessToken;
+        _client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var r3 = await _client.GetAsync("/api/auth/profile");
+        (await r3.Content.ReadAsStringAsync())
+            .Should().NotContainEquivalentOf(sentinel);
+
+        var r4 = await _client.GetAsync("/api/health/metrics");
+        (await r4.Content.ReadAsStringAsync())
+            .Should().NotContainEquivalentOf(sentinel);
+
+        var r5 = await _client.GetAsync("/api/workouts");
+        (await r5.Content.ReadAsStringAsync())
+            .Should().NotContainEquivalentOf(sentinel);
+    }
+
+    private static string CreateExpiredToken()
+    {
+        var key = new SymmetricSecurityKey(
+            System.Text.Encoding.UTF8.GetBytes("test_secret_evolfit_01234567890abcdef01234567890abcdef"));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var now = DateTime.UtcNow;
+
+        var token = new JwtSecurityToken(
+            issuer: "EvolFit",
+            audience: "evolfit-api",
+            claims:
+            [
+                new Claim(ClaimTypes.NameIdentifier, "1"),
+                new Claim(JwtRegisteredClaimNames.Sub, "1"),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            ],
+            notBefore: now.AddMinutes(-15),
+            expires: now.AddMinutes(-5),
+            signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     private static void AssertSecurityHeaders(HttpResponseMessage response)
