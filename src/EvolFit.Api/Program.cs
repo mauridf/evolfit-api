@@ -122,8 +122,13 @@ try
         app.MapOpenApi();
         app.MapScalarApiReference();
     }
-
-    app.UseHttpsRedirection();
+    else
+    {
+        // Em dev o perfil "http" sobe em http://localhost:5032; o 301 para HTTPS
+        // quebra o preflight CORS (OPTIONS não segue redirect), bloqueando o
+        // frontend local (Vite). Em prod o TLS é terminado pelo proxy/reverso.
+        app.UseHttpsRedirection();
+    }
     app.UseCors();
     app.UseRateLimiter();
     app.UseAuthentication();
