@@ -22,15 +22,15 @@ public class WorkoutGeneratorServiceTests
     public async Task Generate_ShouldDistributeRoundRobin()
     {
         // 3 exercícios disponíveis por músculo
-        var list = new List<ExerciseListItemDto>
+        var list = new List<ExerciseListItem>
         {
-            new(1, "Bench Press", "desc", "Chest", new(), new()),
-            new(2, "Incline Press", "desc", "Chest", new(), new()),
-            new(3, "Cable Fly", "desc", "Chest", new(), new()),
+            new(1, "Bench Press", "desc", "Chest", new()),
+            new(2, "Incline Press", "desc", "Chest", new()),
+            new(3, "Cable Fly", "desc", "Chest", new()),
         };
 
         _wger.GetExercisesByMuscleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns(list);
+             .Returns(new ExerciseListResponse(list, list.Count));
 
         var sut = CreateSut();
 
@@ -53,7 +53,7 @@ public class WorkoutGeneratorServiceTests
     public async Task Generate_WithNoExercisesFromWger_ShouldThrow()
     {
         _wger.GetExercisesByMuscleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns(new List<ExerciseListItemDto>());
+             .Returns(new ExerciseListResponse(new(), 0));
 
         var sut = CreateSut();
 
@@ -70,13 +70,13 @@ public class WorkoutGeneratorServiceTests
     public async Task Generate_ShouldApplyDifficultyPrescription(
         string difficulty, int expectedSets, int expectedReps)
     {
-        var list = new List<ExerciseListItemDto>
+        var list = new List<ExerciseListItem>
         {
-            new(5, "Squat", "desc", "Legs", new(), new()),
+            new(5, "Squat", "desc", "Legs", new()),
         };
 
         _wger.GetExercisesByMuscleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns(list);
+             .Returns(new ExerciseListResponse(list, list.Count));
 
         var sut = CreateSut();
 
@@ -89,13 +89,13 @@ public class WorkoutGeneratorServiceTests
     [Fact]
     public async Task Generate_ShouldUpsertFetchedExercisesInCache()
     {
-        var list = new List<ExerciseListItemDto>
+        var list = new List<ExerciseListItem>
         {
-            new(10, "Deadlift", "desc", "Back", new(), new()),
+            new(10, "Deadlift", "desc", "Back", new()),
         };
 
         _wger.GetExercisesByMuscleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns(list);
+             .Returns(new ExerciseListResponse(list, list.Count));
 
         _cache.GetByWgerIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
               .Returns((WgerExerciseCache?)null);
@@ -119,7 +119,7 @@ public class WorkoutGeneratorServiceTests
             TimeSpan.FromDays(7), muscleId: 10); // legs
 
         _wger.GetExercisesByMuscleAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns<IReadOnlyList<ExerciseListItemDto>>(_ => throw new HttpRequestException("wger indisponível"));
+             .Returns<ExerciseListResponse>(_ => throw new HttpRequestException("wger indisponível"));
         _cache.GetByMuscleIdAsync(10, Arg.Any<CancellationToken>())
               .Returns(new List<WgerExerciseCache> { cached });
 
@@ -141,7 +141,7 @@ public class WorkoutGeneratorServiceTests
             TimeSpan.FromDays(7), categoryId: 15);
 
         _wger.GetExercisesByCategoryAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns<IReadOnlyList<ExerciseListItemDto>>(_ => throw new HttpRequestException("wger indisponível"));
+             .Returns<ExerciseListResponse>(_ => throw new HttpRequestException("wger indisponível"));
         _cache.GetByCategoryIdAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
               .Returns(new List<WgerExerciseCache> { cached });
 
@@ -159,13 +159,13 @@ public class WorkoutGeneratorServiceTests
     [Fact]
     public async Task Generate_WithCardio_ShouldQueryByCategory()
     {
-        var list = new List<ExerciseListItemDto>
+        var list = new List<ExerciseListItem>
         {
-            new(177, "Cycling", "desc", "Cardio", new(), new()),
+            new(177, "Cycling", "desc", "Cardio", new()),
         };
 
         _wger.GetExercisesByCategoryAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-             .Returns(list);
+             .Returns(new ExerciseListResponse(list, list.Count));
 
         var sut = CreateSut();
 
@@ -180,3 +180,4 @@ public class WorkoutGeneratorServiceTests
         exercises.Should().OnlyContain(e => e.ExerciseName == "Cycling");
     }
 }
+

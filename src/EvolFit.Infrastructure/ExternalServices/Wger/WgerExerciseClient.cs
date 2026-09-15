@@ -49,68 +49,95 @@ public class WgerExerciseClient : IWgerExerciseClient
         return new ExerciseSearchResponse(results);
     }
 
-    public async Task<IReadOnlyList<ExerciseListItemDto>> GetExercisesByMuscleAsync(
-        int muscleId, CancellationToken ct = default)
-    {
-        var url = $"exerciseinfo/?muscles={muscleId}&language={_options.Language}&status=2";
+    public async Task<ExerciseListResponse> GetExercisesByMuscleAsync(
+        int muscleId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?muscles={muscleId}&language={_options.Language}&status=2", ct);
 
-        var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
+    public async Task<ExerciseListResponse> GetExercisesByCategoryAsync(
+        int categoryId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?category={categoryId}&language={_options.Language}&status=2", ct);
 
-        return raw?.Results?
-            .Select(ToListItem)
-            .Where(d => d.Id > 0)
-            .ToList() ?? new List<ExerciseListItemDto>();
-    }
+    public async Task<ExerciseListResponse> GetExercisesByEquipmentAsync(
+        int equipmentId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?equipment={equipmentId}&language={_options.Language}&status=2", ct);
 
-    public async Task<IReadOnlyList<ExerciseListItemDto>> GetExercisesByCategoryAsync(
-        int categoryId, CancellationToken ct = default)
-    {
-        var url = $"exerciseinfo/?category={categoryId}&language={_options.Language}&status=2";
-
-        var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
-
-        return raw?.Results?
-            .Select(ToListItem)
-            .Where(d => d.Id > 0)
-            .ToList() ?? new List<ExerciseListItemDto>();
-    }
-
-    public async Task<ExerciseDetailDto> GetExerciseInfoAsync(int exerciseId, CancellationToken ct = default)
+    public async Task<ExerciseDetailResponse> GetExerciseInfoAsync(
+        int exerciseId, CancellationToken ct = default)
     {
         var url = $"exerciseinfo/{exerciseId}/";
         var raw = await GetAsync<WgerExerciseInfoRaw>(url, ct)
             ?? throw new HttpRequestException($"Exercício {exerciseId} não encontrado na wger.");
 
         var item = ToListItem(raw);
-        var images = raw.Images?.Select(i => i.Image ?? string.Empty).ToList() ?? new();
+        var equipment = raw.Equipment?.Select(e => e.Name ?? string.Empty).ToList()
+            ?? new List<string>();
+        var images = raw.Images?.Select(i => i.Image ?? string.Empty).ToList()
+            ?? new List<string>();
 
-        return new ExerciseDetailDto(
+        return new ExerciseDetailResponse(
             item.Id,
             item.Name,
             item.Description,
             item.Category,
             item.Muscles,
-            item.Equipment,
+            equipment,
             images);
     }
 
+    public async Task<MuscleListResponse> GetMusclesAsync(CancellationToken ct = default)
+    {
+        var raw = await GetAsync<WgerMuscleListRaw>("muscle/?limit=200", ct);
+
+        var results = raw?.Results
+            .Select(m => new MuscleDto(m.Id, m.Name ?? string.Empty, m.NameEn ?? string.Empty))
+            .ToList() ?? new List<MuscleDto>();
+
+        return new MuscleListResponse(results);
+    }
+
+    public async Task<CategoryListResponse> GetCategoriesAsync(CancellationToken ct = default)
+    {
+        var raw = await GetAsync<WgerCategoryListRaw>("exercisecategory/?limit=200", ct);
+
+        var results = raw?.Results
+            .Select(c => new CategoryDto(c.Id, c.Name ?? string.Empty))
+            .ToList() ?? new List<CategoryDto>();
+
+        return new CategoryListResponse(results);
+    }
+
+    private async Task<ExerciseListResponse> GetExerciseListAsync(
+        string url, CancellationToken ct)
+    {
+        var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
+
+        var results = raw?.Results?
+            .Select(ToListItem)
+            .Where(d => d.Id > 0)
+            .ToList() ?? new List<ExerciseListItem>();
+
+        return new ExerciseListResponse(results, results.Count);
+    }
+
     // A lista retorna traduções por idioma; seleciona o idioma configurado (WGR-003).
-    private ExerciseListItemDto ToListItem(WgerExerciseInfoRaw item)
+    private ExerciseListItem ToListItem(WgerExerciseInfoRaw item)
     {
         var translation = item.Translations?
             .FirstOrDefault(t => t.Language == _options.Language)
             ?? item.Translations?.FirstOrDefault();
 
-        var muscles = item.Muscles?.Select(m => m.Name ?? string.Empty).ToList() ?? new();
-        var equipment = item.Equipment?.Select(e => e.Name ?? string.Empty).ToList() ?? new();
+        var muscles = item.Muscles?.Select(m => m.Name ?? string.Empty).ToList()
+            ?? new List<string>();
 
-        return new ExerciseListItemDto(
+        return new ExerciseListItem(
             item.Id,
             translation?.Name ?? string.Empty,
             translation?.Description ?? string.Empty,
             item.Category?.Name ?? string.Empty,
-            muscles,
-            equipment);
+            muscles);
     }
 
     private async Task<T?> GetAsync<T>(string relativeUrl, CancellationToken ct)
@@ -233,5 +260,29 @@ public class WgerExerciseClient : IWgerExerciseClient
     {
         [JsonPropertyName("results")]
         public List<WgerExerciseInfoRaw>? Results { get; set; }
+    }
+
+    private sealed class WgerMuscleRaw
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("name_en")]
+        public string? NameEn { get; set; }
+    }
+
+    private sealed class WgerMuscleListRaw
+    {
+        [JsonPropertyName("results")]
+        public List<WgerMuscleRaw> Results { get; set; } = new();
+    }
+
+    private sealed class WgerCategoryListRaw
+    {
+        [JsonPropertyName("results")]
+        public List<WgerCategoryRaw> Results { get; set; } = new();
     }
 }
