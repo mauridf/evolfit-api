@@ -10,6 +10,7 @@ using EvolFit.Infrastructure.Data;
 using EvolFit.Infrastructure.Data.Context;
 using EvolFit.Infrastructure.Data.Repositories;
 using EvolFit.Infrastructure.ExternalServices;
+using EvolFit.Infrastructure.ExternalServices.TinyFn;
 using EvolFit.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -60,6 +61,9 @@ public static class DependencyInjection
         // Cache
         services.AddMemoryCache();
         services.AddSingleton<ITinyFnCache, MemoryTinyFnCache>();
+
+        // TFN-002: rate limiter interno TinyFn (3 req/dia por padrão)
+        services.AddSingleton<ITinyFnRateLimiter, TinyFnRateLimiter>();
 
         // HTTP clients externos (TinyFn + Polly)
         services.AddExternalHttpClients(configuration);

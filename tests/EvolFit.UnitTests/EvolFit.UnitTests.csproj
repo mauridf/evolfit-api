@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\EvolFit.Core\EvolFit.Core.csproj" />
     <ProjectReference Include="..\..\src\EvolFit.Application\EvolFit.Application.csproj" />
+    <ProjectReference Include="..\..\src\EvolFit.Infrastructure\EvolFit.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
