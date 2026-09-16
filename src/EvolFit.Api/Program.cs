@@ -112,10 +112,12 @@ try
 
     var app = builder.Build();
 
+    // Serilog mais externo: observa o status final (404/409/422/500) escrito pelo
+    // ExceptionHandlingMiddleware, em vez de logar a exceção crua como 500.
+    app.UseSerilogRequestLogging();
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseHsts();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
-    app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
     {
