@@ -11,6 +11,7 @@ using EvolFit.Infrastructure.Data.Context;
 using EvolFit.Infrastructure.Data.Repositories;
 using EvolFit.Infrastructure.ExternalServices;
 using EvolFit.Infrastructure.ExternalServices.TinyFn;
+using EvolFit.Infrastructure.ExternalServices.Wger;
 using EvolFit.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -59,6 +60,9 @@ public static class DependencyInjection
         services.AddScoped<IExerciseLogRepository, ExerciseLogRepository>();
         services.AddScoped<IWgerExerciseCacheRepository, WgerExerciseCacheRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Busca de exercícios (catálogo local sincronizado da wger - WGR-006)
+        services.AddScoped<IExerciseSearchService, WgerExerciseSearchService>();
 
         // Segurança
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();

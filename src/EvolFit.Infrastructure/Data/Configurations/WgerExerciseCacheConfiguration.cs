@@ -18,6 +18,7 @@ public class WgerExerciseCacheConfiguration : IEntityTypeConfiguration<WgerExerc
         builder.Property(e => e.MusclesJson).HasColumnName("muscles").HasColumnType("jsonb");
         builder.Property(e => e.EquipmentJson).HasColumnName("equipment").HasColumnType("jsonb");
         builder.Property(e => e.ImagesJson).HasColumnName("images").HasColumnType("jsonb");
+        builder.Property(e => e.NamePt).HasColumnName("name_pt").HasMaxLength(255);
         builder.Property(e => e.CachedAt).HasColumnName("cached_at");
         builder.Property(e => e.ExpiresAt).HasColumnName("expires_at");
         builder.Property(e => e.MuscleId).HasColumnName("muscle_id");

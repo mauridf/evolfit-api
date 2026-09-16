@@ -15,6 +15,10 @@ public class WgerExerciseClient : IWgerExerciseClient
         PropertyNameCaseInsensitive = true
     };
 
+    private const int PageSize = 100;
+    private const int WgerLanguagePt = 7;
+    private const int WgerLanguageEn = 2;
+
     private readonly HttpClient _httpClient;
     private readonly WgerOptions _options;
     private readonly ILogger<WgerExerciseClient> _logger;
@@ -29,24 +33,55 @@ public class WgerExerciseClient : IWgerExerciseClient
         _logger = logger;
     }
 
-    public async Task<ExerciseSearchResponse> SearchExercisesAsync(string term, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExerciseCatalogItem>> GetCatalogAsync(
+        CancellationToken ct = default)
     {
-        var lang = _options.Language == 2 ? "english" : "portuguese";
-        var url = $"exercise/search/?term={Uri.EscapeDataString(term)}&language={lang}";
+        var results = new List<ExerciseCatalogItem>();
+        var offset = 0;
 
-        var raw = await GetAsync<WgerSearchEnvelope>(url, ct);
+        while (true)
+        {
+            var url = $"exerciseinfo/?status=2&limit={PageSize}&offset={offset}";
+            var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
 
-        var results = raw?.Suggestions?
-            .Select(s => new ExerciseSearchResultDto(
-                s.Data?.Id ?? 0,
-                s.Value ?? string.Empty,
-                s.Data?.Description ?? string.Empty,
-                s.Data?.Category ?? string.Empty,
-                ParseMuscleString(s.Data?.Muscles)))
-            .Where(r => r.Id > 0)
-            .ToList() ?? new List<ExerciseSearchResultDto>();
+            if (raw?.Results is null || raw.Results.Count == 0)
+                break;
 
-        return new ExerciseSearchResponse(results);
+            foreach (var item in raw.Results)
+            {
+                var translationEn = item.Translations?
+                    .FirstOrDefault(t => t.Language == WgerLanguageEn);
+                var translationPt = item.Translations?
+                    .FirstOrDefault(t => t.Language == WgerLanguagePt);
+
+                var muscles = item.Muscles?.Select(m => m.Name ?? string.Empty).ToList()
+                    ?? new List<string>();
+                var equipment = item.Equipment?.Select(e => e.Name ?? string.Empty).ToList()
+                    ?? new List<string>();
+                var images = item.Images?.Select(i => i.Image ?? string.Empty).ToList()
+                    ?? new List<string>();
+
+                results.Add(new ExerciseCatalogItem(
+                    item.Id,
+                    translationEn?.Name ?? string.Empty,
+                    translationPt?.Name,
+                    translationEn?.Description,
+                    translationPt?.Description,
+                    item.Category?.Name,
+                    item.Category?.Id,
+                    item.Muscles?.FirstOrDefault()?.Id,
+                    muscles,
+                    equipment,
+                    images));
+            }
+
+            if (raw.Results.Count < PageSize)
+                break;
+
+            offset += PageSize;
+        }
+
+        return results;
     }
 
     public async Task<ExerciseListResponse> GetExercisesByMuscleAsync(
@@ -122,7 +157,6 @@ public class WgerExerciseClient : IWgerExerciseClient
         return new ExerciseListResponse(results, results.Count);
     }
 
-    // A lista retorna traduções por idioma; seleciona o idioma configurado (WGR-003).
     private ExerciseListItem ToListItem(WgerExerciseInfoRaw item)
     {
         var translation = item.Translations?
@@ -153,44 +187,6 @@ public class WgerExerciseClient : IWgerExerciseClient
         }
 
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
-    }
-
-    private static List<string> ParseMuscleString(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
-        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-    }
-
-    // ---------- Envelopes específicos da wger ----------
-    private sealed class WgerSearchEnvelope
-    {
-        [JsonPropertyName("suggestions")]
-        public List<WgerSearchSuggestion>? Suggestions { get; set; }
-    }
-
-    private sealed class WgerSearchSuggestion
-    {
-        [JsonPropertyName("value")]
-        public string? Value { get; set; }
-
-        [JsonPropertyName("data")]
-        public WgerSearchSuggestionData? Data { get; set; }
-    }
-
-    private sealed class WgerSearchSuggestionData
-    {
-        [JsonPropertyName("id")]
-        public int Id { get; set; }
-
-        [JsonPropertyName("description")]
-        public string? Description { get; set; }
-
-        [JsonPropertyName("category")]
-        public string? Category { get; set; }
-
-        [JsonPropertyName("muscles")]
-        public string? Muscles { get; set; }
     }
 
     private sealed class WgerExerciseInfoRaw

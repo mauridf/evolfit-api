@@ -21,3 +21,16 @@ public sealed record MuscleListResponse(List<MuscleDto> Results);
 
 public sealed record CategoryDto(int Id, string Name);
 public sealed record CategoryListResponse(List<CategoryDto> Results);
+
+public sealed record ExerciseCatalogItem(
+    int Id,
+    string NameEn,
+    string? NamePt,
+    string? DescriptionEn,
+    string? DescriptionPt,
+    string? Category,
+    int? CategoryId,
+    int? MuscleId,
+    List<string> Muscles,
+    List<string> Equipment,
+    List<string> Images);

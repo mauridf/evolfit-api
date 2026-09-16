@@ -73,6 +73,45 @@ public class WgerExerciseClientTests
         handler.RequestedUrls.Should().ContainSingle().Which.Should().Contain("exercisecategory/?limit=200");
     }
 
+    [Fact]
+    public async Task GetCatalogAsync_ShouldMapEnAndPtTranslations()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""
+                { "results": [ {
+                    "id": 530,
+                    "translations": [
+                        { "language": 2, "name": "Run - Treadmill", "description": "en desc" },
+                        { "language": 7, "name": "Esteira", "description": "desc pt" }
+                    ],
+                    "category": { "id": 15, "name": "Cardio" },
+                    "muscles": [ { "id": 10, "name": "Quadriceps" } ],
+                    "equipment": [ { "id": 8, "name": "Treadmill" } ],
+                    "images": [ { "image": "https://img/530.jpg" } ]
+                } ] }
+                """, Encoding.UTF8, "application/json")
+        });
+
+        var client = CreateClient(handler);
+
+        var res = await client.GetCatalogAsync();
+
+        var item = res.Should().ContainSingle().Subject;
+        item.Id.Should().Be(530);
+        item.NameEn.Should().Be("Run - Treadmill");
+        item.NamePt.Should().Be("Esteira");
+        item.DescriptionEn.Should().Be("en desc");
+        item.DescriptionPt.Should().Be("desc pt");
+        item.Category.Should().Be("Cardio");
+        item.CategoryId.Should().Be(15);
+        item.MuscleId.Should().Be(10);
+        item.Muscles.Should().Contain("Quadriceps");
+        item.Equipment.Should().Contain("Treadmill");
+        item.Images.Should().Contain("https://img/530.jpg");
+        handler.RequestedUrls.Should().ContainSingle(u => u.Contains("status=2") && u.Contains("limit=100"));
+    }
+
     private static WgerExerciseClient CreateClient(HttpMessageHandler handler) =>
         new(
             new HttpClient(handler) { BaseAddress = new Uri("https://wger.de/api/v2/") },

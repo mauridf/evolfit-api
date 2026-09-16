@@ -16,6 +16,7 @@ public class WgerExerciseCache
     public string? ImagesJson { get; private set; }
     public int? MuscleId { get; private set; }
     public int? CategoryId { get; private set; }
+    public string? NamePt { get; private set; }
     public DateTime CachedAt { get; private set; }
     public DateTime ExpiresAt { get; private set; }
 
@@ -31,13 +32,15 @@ public class WgerExerciseCache
         string? imagesJson,
         TimeSpan ttl,
         int? muscleId = null,
-        int? categoryId = null)
+        int? categoryId = null,
+        string? namePt = null)
     {
         var now = DateTime.UtcNow;
         return new WgerExerciseCache
         {
             WgerExerciseId = wgerExerciseId,
             Name = name,
+            NamePt = namePt,
             Description = description,
             Category = category,
             MusclesJson = musclesJson,
@@ -61,9 +64,11 @@ public class WgerExerciseCache
         string? imagesJson,
         TimeSpan ttl,
         int? muscleId = null,
-        int? categoryId = null)
+        int? categoryId = null,
+        string? namePt = null)
     {
         Name = name;
+        NamePt = namePt;
         Description = description;
         Category = category;
         MusclesJson = musclesJson;

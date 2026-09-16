@@ -10,21 +10,24 @@ namespace EvolFit.Api.Controllers;
 public class ExercisesController : ControllerBase
 {
     private readonly IWgerExerciseClient _wger;
+    private readonly IExerciseSearchService _search;
 
-    public ExercisesController(IWgerExerciseClient wger)
+    public ExercisesController(IWgerExerciseClient wger, IExerciseSearchService search)
     {
         _wger = wger;
+        _search = search;
     }
 
     [HttpGet("search")]
     public async Task<IActionResult> Search(
         [FromQuery] string term,
-        CancellationToken ct)
+        [FromQuery] string language = "all",
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(term))
             return BadRequest(new { error = "Termo de busca é obrigatório." });
 
-        var result = await _wger.SearchExercisesAsync(term, ct);
+        var result = await _search.SearchAsync(term, language, ct);
         return Ok(result);
     }
 
