@@ -26,7 +26,17 @@ public static class DependencyInjection
     {
         // DbContext
         services.AddDbContext<EvolFitDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(
+                configuration.GetConnectionString("DefaultConnection"),
+                npgsql =>
+                {
+                    // Lamina de contenção para o síndrome de "conexão presa" que
+                    // travou o pipeline inteiro várias vezes em dev (DB commit
+                    // acontece, resposta nunca sai, pool esgota).
+                    // Tempo de conexão/pool e keepalive ficam na connection string.
+                    npgsql.CommandTimeout(15);
+                    npgsql.EnableRetryOnFailure(2, TimeSpan.FromSeconds(2), null);
+                }));
 
         // JWT
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
