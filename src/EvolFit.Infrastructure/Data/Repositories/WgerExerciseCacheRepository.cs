@@ -39,29 +39,29 @@ public class WgerExerciseCacheRepository : IWgerExerciseCacheRepository
     public async Task<IReadOnlyList<WgerExerciseCache>> SearchByTermsAsync(
         IReadOnlyCollection<string> terms, string languageMode, int limit, CancellationToken ct = default)
     {
-        var cleanTerms = terms
+        var patterns = terms
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct()
+            .Select(t => $"%{t}%")
             .ToArray();
 
         IQueryable<WgerExerciseCache> query = _context.WgerExercisesCache;
 
-        if (cleanTerms.Length > 0)
+        if (patterns.Length > 0)
         {
             query = languageMode switch
             {
                 "english" => query.Where(e =>
-                    cleanTerms.Any(t => EF.Functions.ILike(e.Name, $"%{t}%"))),
+                    patterns.Any(p => EF.Functions.ILike(e.Name, p))),
                 "portuguese" => query.Where(e =>
-                    e.NamePt != null && cleanTerms.Any(t => EF.Functions.ILike(e.NamePt, $"%{t}%"))),
+                    e.NamePt != null && patterns.Any(p => EF.Functions.ILike(e.NamePt, p))),
                 _ => query.Where(e =>
-                    cleanTerms.Any(t => EF.Functions.ILike(e.Name, $"%{t}%"))
-                    || (e.NamePt != null && cleanTerms.Any(t => EF.Functions.ILike(e.NamePt, $"%{t}%")))),
+                    patterns.Any(p => EF.Functions.ILike(e.Name, p))
+                    || (e.NamePt != null && patterns.Any(p => EF.Functions.ILike(e.NamePt, p)))),
             };
         }
         else
         {
-            // sem termos válidos → nenhum resultado
             query = query.Where(_ => false);
         }
 
