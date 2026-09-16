@@ -36,6 +36,13 @@ public class ExceptionHandlingMiddleware
             await WriteProblemDetails(context, StatusCodes.Status401Unauthorized,
                 "Unauthorized", ex.Message, "UNAUTHORIZED");
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // Cliente desistiu/cancelou a requisição (timeout, logout, fechou a página).
+            // Nenhuma resposta é gravada — evita 500 espúrio em aborts.
+            _logger.LogDebug("Requisição cancelada pelo cliente: {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro não tratado");
