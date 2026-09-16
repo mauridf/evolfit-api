@@ -27,6 +27,12 @@ public class ExerciseLogRepository : IExerciseLogRepository
             .Where(l => l.UserId == userId && l.Date == date)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<ExerciseLog>> GetByUserAndDateRangeAsync(
+        int userId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
+        await _context.ExerciseLogs
+            .Where(l => l.UserId == userId && l.Date >= from && l.Date <= to)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<ExerciseLog>> GetByUserAndExerciseIdsAsync(
         int userId, IReadOnlyCollection<int> exerciseIds, CancellationToken ct = default) =>
         await _context.ExerciseLogs

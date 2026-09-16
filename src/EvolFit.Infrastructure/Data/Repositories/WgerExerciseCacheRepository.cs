@@ -14,6 +14,79 @@ public class WgerExerciseCacheRepository : IWgerExerciseCacheRepository
     public Task<WgerExerciseCache?> GetByWgerIdAsync(int wgerExerciseId, CancellationToken ct = default) =>
         _context.WgerExercisesCache.FirstOrDefaultAsync(e => e.WgerExerciseId == wgerExerciseId, ct);
 
+    public async Task<IReadOnlyList<WgerExerciseCache>> GetByMuscleIdAsync(
+        int muscleId, CancellationToken ct = default)
+    {
+        var rows = await _context.WgerExercisesCache
+            .Where(e => e.MuscleId == muscleId)
+            .OrderBy(e => e.Id)
+            .ToListAsync(ct);
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<WgerExerciseCache>> GetByCategoryIdAsync(
+        int categoryId, CancellationToken ct = default)
+    {
+        var rows = await _context.WgerExercisesCache
+            .Where(e => e.CategoryId == categoryId)
+            .OrderBy(e => e.Id)
+            .ToListAsync(ct);
+
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<WgerExerciseCache>> SearchByTermsAsync(
+        IReadOnlyCollection<string> terms, string languageMode, int limit, CancellationToken ct = default)
+    {
+        var patterns = terms
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct()
+            .Select(t => $"%{t}%")
+            .ToArray();
+
+        IQueryable<WgerExerciseCache> query = _context.WgerExercisesCache;
+
+        if (patterns.Length > 0)
+        {
+            query = languageMode switch
+            {
+                "english" => query.Where(e =>
+                    patterns.Any(p => EF.Functions.ILike(e.Name, p))),
+                "portuguese" => query.Where(e =>
+                    e.NamePt != null && patterns.Any(p => EF.Functions.ILike(e.NamePt, p))),
+                _ => query.Where(e =>
+                    patterns.Any(p => EF.Functions.ILike(e.Name, p))
+                    || (e.NamePt != null && patterns.Any(p => EF.Functions.ILike(e.NamePt, p)))),
+            };
+        }
+        else
+        {
+            query = query.Where(_ => false);
+        }
+
+        var rows = await query
+            .AsNoTracking()
+            .OrderBy(e => e.Name)
+            .ThenBy(e => e.WgerExerciseId)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return rows;
+    }
+
+    public Task<DateTime?> MaxCatalogExpiresAtAsync(CancellationToken ct = default) =>
+        _context.WgerExercisesCache
+            .Where(e => e.CategoryId != null)
+            .MaxAsync(e => (DateTime?)e.ExpiresAt, ct);
+
+    public async Task RemoveCatalogEntriesAsync(CancellationToken ct = default)
+    {
+        var catalogRows = _context.WgerExercisesCache.Where(e => e.CategoryId != null);
+        _context.WgerExercisesCache.RemoveRange(catalogRows);
+        await Task.CompletedTask;
+    }
+
     public async Task AddAsync(WgerExerciseCache entry, CancellationToken ct = default) =>
         await _context.WgerExercisesCache.AddAsync(entry, ct);
 

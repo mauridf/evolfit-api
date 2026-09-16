@@ -25,5 +25,8 @@ public class HealthMetricConfiguration : IEntityTypeConfiguration<HealthMetric>
                 v => v.HasValue ? v.Value.ToApiValue() : null,
                 v => string.IsNullOrEmpty(v) ? null : EvolFit.Core.Enums.ActivityLevelExtensions.FromApiValue(v));
         builder.Property(m => m.MeasuredAt).HasColumnName("measured_at");
+        builder.Property(m => m.ProteinG).HasColumnName("protein_g");
+        builder.Property(m => m.CarbsG).HasColumnName("carbs_g");
+        builder.Property(m => m.FatG).HasColumnName("fat_g");
     }
 }

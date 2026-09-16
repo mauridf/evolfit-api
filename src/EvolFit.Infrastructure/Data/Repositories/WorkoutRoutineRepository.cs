@@ -30,14 +30,14 @@ public class WorkoutRoutineRepository : IWorkoutRoutineRepository
             .FirstOrDefaultAsync(ct);
 
     public async Task<(IReadOnlyList<WorkoutRoutine> Items, int Total)> GetPagedForUserAsync(
-        int userId, int page, int pageSize, int? status, CancellationToken ct = default)
+        int userId, int page, int pageSize, WorkoutStatus? status, CancellationToken ct = default)
     {
         var query = _context.WorkoutRoutines
             .Include(r => r.Exercises)
             .Where(r => r.UserId == userId);
 
         if (status.HasValue)
-            query = query.Where(r => (int)r.Status == status.Value);
+            query = query.Where(r => r.Status == status.Value);
 
         query = query.OrderByDescending(r => r.CreatedAt);
 

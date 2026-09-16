@@ -53,24 +53,24 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
         var routine = WorkoutRoutine.Create(userId, request.Name, goal, startDate, request.PeriodDays);
 
         // 2. Busca exercícios por parte do corpo
-        var muscleIds = BodyPartMuscleMapper.ToMuscleIds(bodyParts);
-        var allExercises = new List<ExerciseListItemDto>();
+        var allExercises = new List<ExerciseListItem>();
 
-        foreach (var muscleId in muscleIds)
+        foreach (var part in bodyParts)
         {
+            IReadOnlyList<ExerciseListItem> exercises;
             try
             {
-                var exercises = await _wger.GetExercisesByMuscleAsync(muscleId, ct);
-                allExercises.AddRange(exercises);
-
-                // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
-                foreach (var exercise in exercises)
-                    await UpsertCacheAsync(exercise, ct);
+                exercises = await FetchForBodyPartAsync(part, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Falha ao buscar exercícios para músculo {MuscleId}", muscleId);
+                // WGR-005: em caso de erro da wger, cai no cache local.
+                _logger.LogWarning(ex,
+                    "WGR-005: wger falhou para {BodyPart}; usando cache local", part);
+                exercises = await LoadFromCacheAsync(part, ct);
             }
+
+            allExercises.AddRange(exercises);
         }
 
         // 3. Remove duplicatas por Id
@@ -115,10 +115,69 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
         return (routine, workoutExercises);
     }
 
-    private async Task UpsertCacheAsync(ExerciseListItemDto item, CancellationToken ct)
+    private async Task<IReadOnlyList<ExerciseListItem>> FetchForBodyPartAsync(
+        BodyPart part, CancellationToken ct)
+    {
+        // WGR-003: cardio não é músculo — usa a categoria 15 da wger.
+        ExerciseListResponse response = part == BodyPart.Cardio
+            ? await _wger.GetExercisesByCategoryAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
+            : await _wger.GetExercisesByMuscleAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
+
+        // WGR-002: grava exercícios obtidos no cache local (offline + menos chamadas)
+        foreach (var exercise in response.Results)
+            await UpsertCacheAsync(
+                exercise,
+                muscleId: part == BodyPart.Cardio ? null : BodyPartMuscleMapper.ToMuscleId(part),
+                categoryId: part == BodyPart.Cardio ? BodyPartMuscleMapper.CardioCategoryId : null,
+                ct);
+
+        return response.Results;
+    }
+
+    // WGR-005: fallback offline usa os exercícios em cache da mesma parte do corpo.
+    private async Task<IReadOnlyList<ExerciseListItem>> LoadFromCacheAsync(
+        BodyPart part, CancellationToken ct)
+    {
+        IReadOnlyList<WgerExerciseCache> cached = part == BodyPart.Cardio
+            ? await _cache.GetByCategoryIdAsync(BodyPartMuscleMapper.CardioCategoryId, ct)
+            : await _cache.GetByMuscleIdAsync(BodyPartMuscleMapper.ToMuscleId(part), ct);
+
+        if (cached.Count > 0)
+        {
+            _logger.LogWarning("WGR-005: usando {Count} exercício(s) do cache para {BodyPart}",
+                cached.Count, part);
+        }
+
+        return cached
+            .Select(c => new ExerciseListItem(
+                c.WgerExerciseId,
+                c.Name,
+                c.Description ?? string.Empty,
+                c.Category ?? string.Empty,
+                DeserializeStrings(c.MusclesJson)))
+            .ToList();
+    }
+
+    private static List<string> DeserializeStrings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
+    }
+
+    private async Task UpsertCacheAsync(
+        ExerciseListItem item,
+        int? muscleId,
+        int? categoryId,
+        CancellationToken ct)
     {
         var musclesJson = JsonSerializer.Serialize(item.Muscles);
-        var equipmentJson = JsonSerializer.Serialize(item.Equipment);
 
         var cached = await _cache.GetByWgerIdAsync(item.Id, ct);
 
@@ -130,9 +189,11 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
                 item.Description,
                 item.Category,
                 musclesJson,
-                equipmentJson,
+                equipmentJson: null,
                 imagesJson: null,
-                CacheTtl), ct);
+                CacheTtl,
+                muscleId,
+                categoryId), ct);
         }
         else if (cached.IsExpired)
         {
@@ -141,16 +202,19 @@ public class WorkoutGeneratorService : IWorkoutGeneratorService
                 item.Description,
                 item.Category,
                 musclesJson,
-                equipmentJson,
+                equipmentJson: null,
                 imagesJson: null,
-                CacheTtl);
+                CacheTtl,
+                muscleId,
+                categoryId);
             _cache.Update(cached);
         }
     }
 
     private static (int Sets, int Reps) PrescribeByDifficulty(Difficulty difficulty) => difficulty switch
     {
-        Difficulty.Beginner => (Sets: 3, Reps: 8),
+        // Reps no padrão documentado (MASTER_SPEC §17.3): 10-12
+        Difficulty.Beginner => (Sets: 3, Reps: 10),
         Difficulty.Intermediate => (Sets: 3, Reps: 10),
         Difficulty.Advanced => (Sets: 4, Reps: 12),
         _ => (Sets: 3, Reps: 10)

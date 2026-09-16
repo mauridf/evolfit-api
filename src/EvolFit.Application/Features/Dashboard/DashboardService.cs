@@ -133,16 +133,31 @@ public class DashboardService : IDashboardService
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var start = today.AddDays(-(days - 1));
 
+        // Uma única query no intervalo [start, today] em vez de N queries por dia.
+        var logs = await _logs.GetByUserAndDateRangeAsync(userId, start, today, ct);
+        var logsByDate = logs
+            .GroupBy(l => l.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<ComplianceDayDto>();
 
         // Para cada dia, calcula total e concluídos
         for (var i = 0; i < days; i++)
         {
             var date = start.AddDays(i);
-            var logs = await _logs.GetByUserAndDateAsync(userId, date, ct);
 
-            var completedCount = logs.Count(l => l.Completed);
-            var totalCount = logs.Count;
+            if (!logsByDate.TryGetValue(date, out var dayLogs) || dayLogs.Count == 0)
+            {
+                result.Add(new ComplianceDayDto(
+                    date.ToString("yyyy-MM-dd"),
+                    0,
+                    0,
+                    0m));
+                continue;
+            }
+
+            var completedCount = dayLogs.Count(l => l.Completed);
+            var totalCount = dayLogs.Count;
 
             var percent = totalCount == 0
                 ? 0m
@@ -167,18 +182,26 @@ public class DashboardService : IDashboardService
     private async Task<decimal> CalculateWeeklyAverageAsync(int userId, CancellationToken ct)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var start = today.AddDays(-6);
+
+        // Uma única query no intervalo em vez de 7 queries por dia.
+        var logs = await _logs.GetByUserAndDateRangeAsync(userId, start, today, ct);
+        var logsByDate = logs
+            .GroupBy(l => l.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var totalPercent = 0m;
         var daysWithData = 0;
 
         for (var i = 0; i < 7; i++)
         {
             var date = today.AddDays(-i);
-            var logs = await _logs.GetByUserAndDateAsync(userId, date, ct);
 
-            if (logs.Count == 0) continue;
+            if (!logsByDate.TryGetValue(date, out var dayLogs) || dayLogs.Count == 0)
+                continue;
 
-            var completed = logs.Count(l => l.Completed);
-            totalPercent += 100m * completed / logs.Count;
+            var completed = dayLogs.Count(l => l.Completed);
+            totalPercent += 100m * completed / dayLogs.Count;
             daysWithData++;
         }
 

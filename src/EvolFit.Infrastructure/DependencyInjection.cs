@@ -10,6 +10,8 @@ using EvolFit.Infrastructure.Data;
 using EvolFit.Infrastructure.Data.Context;
 using EvolFit.Infrastructure.Data.Repositories;
 using EvolFit.Infrastructure.ExternalServices;
+using EvolFit.Infrastructure.ExternalServices.TinyFn;
+using EvolFit.Infrastructure.ExternalServices.Wger;
 using EvolFit.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -25,7 +27,17 @@ public static class DependencyInjection
     {
         // DbContext
         services.AddDbContext<EvolFitDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(
+                configuration.GetConnectionString("DefaultConnection"),
+                npgsql =>
+                {
+                    // Lamina de contenção para o síndrome de "conexão presa" que
+                    // travou o pipeline inteiro várias vezes em dev (DB commit
+                    // acontece, resposta nunca sai, pool esgota).
+                    // Tempo de conexão/pool e keepalive ficam na connection string.
+                    npgsql.CommandTimeout(15);
+                    npgsql.EnableRetryOnFailure(2, TimeSpan.FromSeconds(2), null);
+                }));
 
         // JWT
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
@@ -33,6 +45,10 @@ public static class DependencyInjection
         {
             options.RefreshTokenExpireDays =
                 int.TryParse(configuration["Jwt:RefreshTokenExpireDays"], out var days) ? days : 7;
+            options.MaxLoginAttempts =
+                int.TryParse(configuration["Auth:MaxLoginAttempts"], out var attempts) ? attempts : 5;
+            options.LockoutMinutes =
+                int.TryParse(configuration["Auth:LockoutMinutes"], out var minutes) ? minutes : 15;
         });
 
         // Repositórios
@@ -45,6 +61,9 @@ public static class DependencyInjection
         services.AddScoped<IWgerExerciseCacheRepository, WgerExerciseCacheRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+        // Busca de exercícios (catálogo local sincronizado da wger - WGR-006)
+        services.AddScoped<IExerciseSearchService, WgerExerciseSearchService>();
+
         // Segurança
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<ITokenService, JwtTokenService>();
@@ -56,6 +75,9 @@ public static class DependencyInjection
         // Cache
         services.AddMemoryCache();
         services.AddSingleton<ITinyFnCache, MemoryTinyFnCache>();
+
+        // TFN-002: rate limiter interno TinyFn (3 req/dia por padrão)
+        services.AddSingleton<ITinyFnRateLimiter, TinyFnRateLimiter>();
 
         // HTTP clients externos (TinyFn + Polly)
         services.AddExternalHttpClients(configuration);

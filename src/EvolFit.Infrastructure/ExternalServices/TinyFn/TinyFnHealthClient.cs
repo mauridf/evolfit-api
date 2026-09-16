@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using EvolFit.Application.Features.TinyFn.DTOs;
+using EvolFit.Application.Features.TinyFn.Exceptions;
 using EvolFit.Application.Features.TinyFn.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,15 +17,18 @@ public class TinyFnHealthClient : ITinyFnHealthClient
 
     private readonly HttpClient _httpClient;
     private readonly TinyFnOptions _options;
+    private readonly ITinyFnRateLimiter _rateLimiter;
     private readonly ILogger<TinyFnHealthClient> _logger;
 
     public TinyFnHealthClient(
         HttpClient httpClient,
         IOptions<TinyFnOptions> options,
+        ITinyFnRateLimiter rateLimiter,
         ILogger<TinyFnHealthClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _rateLimiter = rateLimiter;
         _logger = logger;
     }
 
@@ -54,6 +58,16 @@ public class TinyFnHealthClient : ITinyFnHealthClient
 
     private async Task<T> GetAsync<T>(string relativeUrl, CancellationToken ct)
     {
+        // TFN-002: rate limiter interno — protege a cota de 100 req/mês
+        if (!_rateLimiter.TryConsumeRequest())
+        {
+            var remaining = _rateLimiter.GetRemainingRequests();
+            _logger.LogWarning(
+                "Cota diária TinyFn atingida — {Remaining}/{Max} restantes (TFN-002). Usando fallback local.",
+                remaining, _rateLimiter.MaxRequestsPerDay);
+            throw new TinyFnRateLimitExceededException();
+        }
+
         _logger.LogDebug("TinyFn request: {Url}", relativeUrl);
 
         using var response = await _httpClient.GetAsync(relativeUrl, ct);

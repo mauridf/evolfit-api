@@ -41,7 +41,7 @@ try
     // ---------- DI ----------
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
-    builder.Services.AddEvolFitRateLimiting();
+    builder.Services.AddEvolFitRateLimiting(builder.Configuration);
 
     builder.Services.AddControllers(options =>
     {
@@ -91,6 +91,13 @@ try
     builder.Services.AddAuthorization();
     builder.Services.AddHealthChecks();
 
+    // SECURITY §5 — HSTS (31536000s = 1 ano, includeSubDomains)
+    builder.Services.AddHsts(options =>
+    {
+        options.MaxAge = TimeSpan.FromSeconds(31536000);
+        options.IncludeSubDomains = true;
+    });
+
     // ---------- CORS ----------
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
     builder.Services.AddCors(options =>
@@ -105,16 +112,25 @@ try
 
     var app = builder.Build();
 
-    app.UseMiddleware<ExceptionHandlingMiddleware>();
+    // Serilog mais externo: observa o status final (404/409/422/500) escrito pelo
+    // ExceptionHandlingMiddleware, em vez de logar a exceção crua como 500.
     app.UseSerilogRequestLogging();
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+    app.UseHsts();
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
 
     if (app.Environment.IsDevelopment())
     {
         app.MapOpenApi();
         app.MapScalarApiReference();
     }
-
-    app.UseHttpsRedirection();
+    else
+    {
+        // Em dev o perfil "http" sobe em http://localhost:5032; o 301 para HTTPS
+        // quebra o preflight CORS (OPTIONS não segue redirect), bloqueando o
+        // frontend local (Vite). Em prod o TLS é terminado pelo proxy/reverso.
+        app.UseHttpsRedirection();
+    }
     app.UseCors();
     app.UseRateLimiter();
     app.UseAuthentication();

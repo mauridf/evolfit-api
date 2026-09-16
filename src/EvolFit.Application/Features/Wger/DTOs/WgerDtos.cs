@@ -1,31 +1,36 @@
 namespace EvolFit.Application.Features.Wger.DTOs;
 
-// ---------- Internos (chamada HTTP bruta) ----------
-public sealed record WgerExerciseSearchResult(
-    int Id, string Name, string Description, string Category, string Muscles);
+// Contratos conforme MASTER_SPECIFICATION §16.3 (WGR).
 
-public sealed record WgerExerciseSearchRaw(List<WgerExerciseSearchResult> Results);
-
-public sealed record WgerExerciseListItem(
-    int Id, string Name, string Description, string Category,
-    List<string> Muscles, List<string> Equipment);
-
-public sealed record WgerExerciseListRaw(List<WgerExerciseListItem> Results, int Count);
-
-public sealed record WgerExerciseDetailRaw(
-    int Id, string Name, string Description, string Category,
-    List<string> Muscles, List<string> Equipment, List<string> Images);
-
-// ---------- Públicos (retorno da API EvolFit) ----------
 public sealed record ExerciseSearchResultDto(
     int Id, string Name, string Description, string Category, List<string> Muscles);
 
 public sealed record ExerciseSearchResponse(IReadOnlyList<ExerciseSearchResultDto> Results);
 
-public sealed record ExerciseDetailDto(
+public sealed record ExerciseListItem(
+    int Id, string Name, string Description, string Category, List<string> Muscles);
+
+public sealed record ExerciseListResponse(List<ExerciseListItem> Results, int Count);
+
+public sealed record ExerciseDetailResponse(
     int Id, string Name, string Description, string Category,
     List<string> Muscles, List<string> Equipment, List<string> Images);
 
-public sealed record ExerciseListItemDto(
-    int Id, string Name, string Description, string Category,
-    List<string> Muscles, List<string> Equipment);
+public sealed record MuscleDto(int Id, string Name, string NameEn);
+public sealed record MuscleListResponse(List<MuscleDto> Results);
+
+public sealed record CategoryDto(int Id, string Name);
+public sealed record CategoryListResponse(List<CategoryDto> Results);
+
+public sealed record ExerciseCatalogItem(
+    int Id,
+    string NameEn,
+    string? NamePt,
+    string? DescriptionEn,
+    string? DescriptionPt,
+    string? Category,
+    int? CategoryId,
+    int? MuscleId,
+    List<string> Muscles,
+    List<string> Equipment,
+    List<string> Images);

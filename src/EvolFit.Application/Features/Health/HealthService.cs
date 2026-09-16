@@ -69,7 +69,10 @@ public class HealthService : IHealthService
             bmi: result.Bmi,
             bmr: result.Bmr,
             tdee: result.Tdee,
-            activityLevel: activity);
+            activityLevel: activity,
+            proteinG: result.Macros?.ProteinG,
+            carbsG: result.Macros?.CarbsG,
+            fatG: result.Macros?.FatG);
 
         await _repo.AddAsync(metric, ct);
         await _uow.SaveChangesAsync(ct);
@@ -77,7 +80,7 @@ public class HealthService : IHealthService
         _logger.LogInformation("Nova medição registrada: UserId={UserId}, MetricId={Id}, Bmi={Bmi}",
             userId, metric.Id, metric.Bmi);
 
-        return MapToResponse(metric, result.Macros);
+        return MapToResponse(metric);
     }
 
     public async Task<PagedResponse<HealthMetricListItem>> ListAsync(
@@ -102,7 +105,7 @@ public class HealthService : IHealthService
         var metric = await _repo.GetLatestForUserAsync(_currentUser.UserId, ct)
             ?? throw new NotFoundException("Nenhuma medição de saúde encontrada.");
 
-        return MapToResponse(metric, null);
+        return MapToResponse(metric);
     }
 
     public async Task<HealthMetricResponse> GetByIdAsync(int id, CancellationToken ct = default)
@@ -110,7 +113,7 @@ public class HealthService : IHealthService
         var metric = await _repo.GetByIdForUserAsync(id, _currentUser.UserId, ct)
             ?? throw new NotFoundException("Medição de saúde não encontrada.");
 
-        return MapToResponse(metric, null);
+        return MapToResponse(metric);
     }
 
     public async Task<EvolutionResponse> GetEvolutionAsync(int periodDays, CancellationToken ct = default)
@@ -208,8 +211,13 @@ public class HealthService : IHealthService
     private static Gender ParseGender(string gender) =>
         gender.ToLowerInvariant() == "male" ? Gender.Male : Gender.Female;
 
-    private static HealthMetricResponse MapToResponse(HealthMetric m, MacrosDto? macros) =>
-        new(
+    private static HealthMetricResponse MapToResponse(HealthMetric m)
+    {
+        var macros = m.ProteinG.HasValue && m.CarbsG.HasValue && m.FatG.HasValue
+            ? new MacrosDto(m.ProteinG.Value, m.CarbsG.Value, m.FatG.Value)
+            : null;
+
+        return new(
             m.Id,
             m.HeightCm,
             m.WeightKg,
@@ -219,6 +227,7 @@ public class HealthService : IHealthService
             m.ActivityLevel?.ToApiValue(),
             m.MeasuredAt,
             macros);
+    }
 
     private static HealthMetricListItem MapToListItem(HealthMetric m) =>
         new(

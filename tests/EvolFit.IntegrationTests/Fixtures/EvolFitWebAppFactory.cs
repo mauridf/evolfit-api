@@ -24,6 +24,13 @@ public class EvolFitWebAppFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Secret",
             "test_secret_evolfit_01234567890abcdef01234567890abcdef");
 
+        // Limites de rate limit altos p/ os fluxos de teste não colidirem com o 429
+        builder.UseSetting("RateLimiting:Auth:PermitLimit", "1000");
+        builder.UseSetting("RateLimiting:Authenticated:PermitLimit", "1000");
+
+        // Valor sentinela p/ o teste de vazamento de api key (SECURITY §7)
+        builder.UseSetting("ExternalApis:TinyFn:ApiKey", "SENTINEL-tinyfn-key-do-not-leak");
+
         builder.ConfigureServices(services =>
         {
             // Remove DbContext registrado e substitui pela connection do Testcontainer

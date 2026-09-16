@@ -16,11 +16,17 @@ public class HealthMetricTests
             bmi: 23.30m,
             bmr: 1680,
             tdee: 2604,
-            activityLevel: ActivityLevel.Moderate);
+            activityLevel: ActivityLevel.Moderate,
+            proteinG: 151,
+            carbsG: 293,
+            fatG: 87);
 
         metric.UserId.Should().Be(1);
         metric.Bmi.Should().Be(23.30m);
         metric.ActivityLevel.Should().Be(ActivityLevel.Moderate);
+        metric.ProteinG.Should().Be(151);
+        metric.CarbsG.Should().Be(293);
+        metric.FatG.Should().Be(87);
         metric.MeasuredAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 

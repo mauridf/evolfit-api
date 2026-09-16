@@ -29,8 +29,12 @@ public sealed class ValidationException : AppException
 {
     public IReadOnlyDictionary<string, string[]> Errors { get; }
 
+    /// <summary>
+    /// 422 — Validação de negócio (regras de domínio, VALID-001..004),
+    /// conforme API_REFERENCE §2. Erros de shape/vinculação ficam em 400.
+    /// </summary>
     public ValidationException(IReadOnlyDictionary<string, string[]> errors)
-        : base("Uma ou mais validações falharam.", 400, "VALIDATION_ERROR")
+        : base("Uma ou mais validações falharam.", 422, "VALIDATION_ERROR")
     {
         Errors = errors;
     }

@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration;
 
 namespace EvolFit.Api.Extensions;
 
@@ -8,8 +9,15 @@ public static class RateLimitingExtensions
     public const string AuthPolicy = "auth";
     public const string AuthenticatedPolicy = "authenticated";
 
-    public static IServiceCollection AddEvolFitRateLimiting(this IServiceCollection services)
+    public static IServiceCollection AddEvolFitRateLimiting(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
+        // Limites configuráveis (RateLimiting:Auth:PermitLimit, RateLimiting:Authenticated:PermitLimit)
+        var authPermitLimit = configuration.GetValue<int?>("RateLimiting:Auth:PermitLimit") ?? 5;
+        var authenticatedPermitLimit =
+            configuration.GetValue<int?>("RateLimiting:Authenticated:PermitLimit") ?? 100;
+
         services.AddRateLimiter(options =>
         {
             // Resposta 429 em vez do 503 padrão
@@ -22,7 +30,7 @@ public static class RateLimitingExtensions
                     partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 5,
+                        PermitLimit = authPermitLimit,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
@@ -42,7 +50,7 @@ public static class RateLimitingExtensions
                     partitionKey: userId,
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 100,
+                        PermitLimit = authenticatedPermitLimit,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,

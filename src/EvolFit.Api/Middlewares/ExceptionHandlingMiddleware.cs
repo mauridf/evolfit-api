@@ -23,8 +23,8 @@ public class ExceptionHandlingMiddleware
         }
         catch (ValidationException ex)
         {
-            await WriteProblemDetails(context, StatusCodes.Status400BadRequest,
-                "Validation Error", ex.Message, ex.ErrorCode, ex.Errors);
+            await WriteProblemDetails(context, StatusCodes.Status422UnprocessableEntity,
+                "Validação de negócio", ex.Message, ex.ErrorCode, ex.Errors);
         }
         catch (AppException ex)
         {
@@ -36,12 +36,48 @@ public class ExceptionHandlingMiddleware
             await WriteProblemDetails(context, StatusCodes.Status401Unauthorized,
                 "Unauthorized", ex.Message, "UNAUTHORIZED");
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // Cliente desistiu/cancelou a requisição (timeout, logout, fechou a página).
+            // Nenhuma resposta é gravada — evita 500 espúrio em aborts.
+            _logger.LogDebug("Requisição cancelada pelo cliente: {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+        }
+        catch (Exception ex) when (IsTransientFailure(ex))
+        {
+            // Falha transitória de infraestrutura (p.ex. Npgsql em pico de carga/freeze).
+            // Semântica de "tente de novo" em vez de 500: cliente pode retry/backoff.
+            _logger.LogWarning("Falha transitória de infraestrutura em {Method} {Path}: {Message}",
+                context.Request.Method, context.Request.Path, ex.Message);
+            context.Response.Headers.RetryAfter = "5";
+            await WriteProblemDetails(context, StatusCodes.Status503ServiceUnavailable,
+                "Serviço Indisponível", "Falha temporária de infraestrutura. Tente novamente em instantes.",
+                "SERVICE_UNAVAILABLE");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro não tratado");
             await WriteProblemDetails(context, StatusCodes.Status500InternalServerError,
                 "Internal Server Error", "Ocorreu um erro inesperado.", "INTERNAL_ERROR");
         }
+    }
+
+    /// <summary>
+    /// Detecta falhas de conexão/timeout nas dependências (Npgsql, socket, timeout genérico)
+    /// percorrendo a cadeia de inner exceptions — inclusive o wrapper "transient failure" do EF.
+    /// </summary>
+    private static bool IsTransientFailure(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is Npgsql.NpgsqlException
+                or TimeoutException
+                or System.Net.Sockets.SocketException)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static async Task WriteProblemDetails(

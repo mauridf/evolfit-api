@@ -6,4 +6,5 @@ public class TinyFnOptions
     public string ApiKey { get; set; } = string.Empty;
     public int CacheTtlHours { get; set; } = 24;
     public int TimeOutSeconds { get; set; } = 30;
+    public int MaxRequestsPerDay { get; set; } = 3;
 }

@@ -15,6 +15,10 @@ public class WgerExerciseClient : IWgerExerciseClient
         PropertyNameCaseInsensitive = true
     };
 
+    private const int PageSize = 100;
+    private const int WgerLanguagePt = 7;
+    private const int WgerLanguageEn = 2;
+
     private readonly HttpClient _httpClient;
     private readonly WgerOptions _options;
     private readonly ILogger<WgerExerciseClient> _logger;
@@ -29,62 +33,145 @@ public class WgerExerciseClient : IWgerExerciseClient
         _logger = logger;
     }
 
-    public async Task<ExerciseSearchResponse> SearchExercisesAsync(string term, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ExerciseCatalogItem>> GetCatalogAsync(
+        CancellationToken ct = default)
     {
-        var lang = _options.Language == 2 ? "english" : "portuguese";
-        var url = $"exercise/search/?term={Uri.EscapeDataString(term)}&language={lang}";
+        var results = new List<ExerciseCatalogItem>();
+        var offset = 0;
 
-        var raw = await GetAsync<WgerSearchEnvelope>(url, ct);
+        while (true)
+        {
+            var url = $"exerciseinfo/?status=2&limit={PageSize}&offset={offset}";
+            var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
 
-        var results = raw?.Suggestions?
-            .Select(s => new ExerciseSearchResultDto(
-                s.Data?.Id ?? 0,
-                s.Value ?? string.Empty,
-                s.Data?.Description ?? string.Empty,
-                s.Data?.Category ?? string.Empty,
-                ParseMuscleString(s.Data?.Muscles)))
-            .Where(r => r.Id > 0)
-            .ToList() ?? new List<ExerciseSearchResultDto>();
+            if (raw?.Results is null || raw.Results.Count == 0)
+                break;
 
-        return new ExerciseSearchResponse(results);
+            foreach (var item in raw.Results)
+            {
+                var translationEn = item.Translations?
+                    .FirstOrDefault(t => t.Language == WgerLanguageEn);
+                var translationPt = item.Translations?
+                    .FirstOrDefault(t => t.Language == WgerLanguagePt);
+
+                var muscles = item.Muscles?.Select(m => m.Name ?? string.Empty).ToList()
+                    ?? new List<string>();
+                var equipment = item.Equipment?.Select(e => e.Name ?? string.Empty).ToList()
+                    ?? new List<string>();
+                var images = item.Images?.Select(i => i.Image ?? string.Empty).ToList()
+                    ?? new List<string>();
+
+                results.Add(new ExerciseCatalogItem(
+                    item.Id,
+                    translationEn?.Name ?? string.Empty,
+                    translationPt?.Name,
+                    translationEn?.Description,
+                    translationPt?.Description,
+                    item.Category?.Name,
+                    item.Category?.Id,
+                    item.Muscles?.FirstOrDefault()?.Id,
+                    muscles,
+                    equipment,
+                    images));
+            }
+
+            if (raw.Results.Count < PageSize)
+                break;
+
+            offset += PageSize;
+        }
+
+        return results;
     }
 
-    public async Task<IReadOnlyList<ExerciseListItemDto>> GetExercisesByMuscleAsync(
-        int muscleId, CancellationToken ct = default)
-    {
-        var url = $"exercise/?muscles={muscleId}&language={_options.Language}&status=2";
+    public async Task<ExerciseListResponse> GetExercisesByMuscleAsync(
+        int muscleId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?muscles={muscleId}&language={_options.Language}&status=2", ct);
 
-        var raw = await GetAsync<WgerExerciseListRaw>(url, ct);
+    public async Task<ExerciseListResponse> GetExercisesByCategoryAsync(
+        int categoryId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?category={categoryId}&language={_options.Language}&status=2", ct);
 
-        return raw?.Results?
-            .Select(r => new ExerciseListItemDto(
-                r.Id,
-                r.Name ?? string.Empty,
-                r.Description ?? string.Empty,
-                r.Category ?? string.Empty,
-                r.Muscles ?? new List<string>(),
-                r.Equipment ?? new List<string>()))
-            .ToList() ?? new List<ExerciseListItemDto>();
-    }
+    public async Task<ExerciseListResponse> GetExercisesByEquipmentAsync(
+        int equipmentId, CancellationToken ct = default) =>
+        await GetExerciseListAsync(
+            $"exerciseinfo/?equipment={equipmentId}&language={_options.Language}&status=2", ct);
 
-    public async Task<ExerciseDetailDto> GetExerciseInfoAsync(int exerciseId, CancellationToken ct = default)
+    public async Task<ExerciseDetailResponse> GetExerciseInfoAsync(
+        int exerciseId, CancellationToken ct = default)
     {
         var url = $"exerciseinfo/{exerciseId}/";
         var raw = await GetAsync<WgerExerciseInfoRaw>(url, ct)
             ?? throw new HttpRequestException($"Exercício {exerciseId} não encontrado na wger.");
 
-        var muscles = raw.Muscles?.Select(m => m.Name ?? string.Empty).ToList() ?? new();
-        var equipment = raw.Equipment?.Select(e => e.Name ?? string.Empty).ToList() ?? new();
-        var images = raw.Images?.Select(i => i.Image ?? string.Empty).ToList() ?? new();
+        var item = ToListItem(raw);
+        var equipment = raw.Equipment?.Select(e => e.Name ?? string.Empty).ToList()
+            ?? new List<string>();
+        var images = raw.Images?.Select(i => i.Image ?? string.Empty).ToList()
+            ?? new List<string>();
 
-        return new ExerciseDetailDto(
-            raw.Id,
-            raw.Name ?? string.Empty,
-            raw.Description ?? string.Empty,
-            raw.Category?.Name ?? string.Empty,
-            muscles,
+        return new ExerciseDetailResponse(
+            item.Id,
+            item.Name,
+            item.Description,
+            item.Category,
+            item.Muscles,
             equipment,
             images);
+    }
+
+    public async Task<MuscleListResponse> GetMusclesAsync(CancellationToken ct = default)
+    {
+        var raw = await GetAsync<WgerMuscleListRaw>("muscle/?limit=200", ct);
+
+        var results = raw?.Results
+            .Select(m => new MuscleDto(m.Id, m.Name ?? string.Empty, m.NameEn ?? string.Empty))
+            .ToList() ?? new List<MuscleDto>();
+
+        return new MuscleListResponse(results);
+    }
+
+    public async Task<CategoryListResponse> GetCategoriesAsync(CancellationToken ct = default)
+    {
+        var raw = await GetAsync<WgerCategoryListRaw>("exercisecategory/?limit=200", ct);
+
+        var results = raw?.Results
+            .Select(c => new CategoryDto(c.Id, c.Name ?? string.Empty))
+            .ToList() ?? new List<CategoryDto>();
+
+        return new CategoryListResponse(results);
+    }
+
+    private async Task<ExerciseListResponse> GetExerciseListAsync(
+        string url, CancellationToken ct)
+    {
+        var raw = await GetAsync<WgerExerciseInfoListRaw>(url, ct);
+
+        var results = raw?.Results?
+            .Select(ToListItem)
+            .Where(d => d.Id > 0)
+            .ToList() ?? new List<ExerciseListItem>();
+
+        return new ExerciseListResponse(results, results.Count);
+    }
+
+    private ExerciseListItem ToListItem(WgerExerciseInfoRaw item)
+    {
+        var translation = item.Translations?
+            .FirstOrDefault(t => t.Language == _options.Language)
+            ?? item.Translations?.FirstOrDefault();
+
+        var muscles = item.Muscles?.Select(m => m.Name ?? string.Empty).ToList()
+            ?? new List<string>();
+
+        return new ExerciseListItem(
+            item.Id,
+            translation?.Name ?? string.Empty,
+            translation?.Description ?? string.Empty,
+            item.Category?.Name ?? string.Empty,
+            muscles);
     }
 
     private async Task<T?> GetAsync<T>(string relativeUrl, CancellationToken ct)
@@ -100,44 +187,6 @@ public class WgerExerciseClient : IWgerExerciseClient
         }
 
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
-    }
-
-    private static List<string> ParseMuscleString(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
-        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToList();
-    }
-
-    // ---------- Envelopes específicos da wger ----------
-    private sealed class WgerSearchEnvelope
-    {
-        [JsonPropertyName("suggestions")]
-        public List<WgerSearchSuggestion>? Suggestions { get; set; }
-    }
-
-    private sealed class WgerSearchSuggestion
-    {
-        [JsonPropertyName("value")]
-        public string? Value { get; set; }
-
-        [JsonPropertyName("data")]
-        public WgerSearchSuggestionData? Data { get; set; }
-    }
-
-    private sealed class WgerSearchSuggestionData
-    {
-        [JsonPropertyName("id")]
-        public int Id { get; set; }
-
-        [JsonPropertyName("description")]
-        public string? Description { get; set; }
-
-        [JsonPropertyName("category")]
-        public string? Category { get; set; }
-
-        [JsonPropertyName("muscles")]
-        public string? Muscles { get; set; }
     }
 
     private sealed class WgerExerciseInfoRaw
@@ -162,6 +211,9 @@ public class WgerExerciseClient : IWgerExerciseClient
 
         [JsonPropertyName("images")]
         public List<WgerImageRaw>? Images { get; set; }
+
+        [JsonPropertyName("translations")]
+        public List<WgerTranslationRaw>? Translations { get; set; }
     }
 
     private sealed class WgerCategoryRaw
@@ -186,5 +238,47 @@ public class WgerExerciseClient : IWgerExerciseClient
     {
         [JsonPropertyName("image")]
         public string? Image { get; set; }
+    }
+
+    private sealed class WgerTranslationRaw
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("language")]
+        public int Language { get; set; }
+    }
+
+    private sealed class WgerExerciseInfoListRaw
+    {
+        [JsonPropertyName("results")]
+        public List<WgerExerciseInfoRaw>? Results { get; set; }
+    }
+
+    private sealed class WgerMuscleRaw
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("name_en")]
+        public string? NameEn { get; set; }
+    }
+
+    private sealed class WgerMuscleListRaw
+    {
+        [JsonPropertyName("results")]
+        public List<WgerMuscleRaw> Results { get; set; } = new();
+    }
+
+    private sealed class WgerCategoryListRaw
+    {
+        [JsonPropertyName("results")]
+        public List<WgerCategoryRaw> Results { get; set; } = new();
     }
 }
