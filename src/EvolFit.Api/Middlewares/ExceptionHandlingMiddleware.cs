@@ -43,12 +43,41 @@ public class ExceptionHandlingMiddleware
             _logger.LogDebug("Requisição cancelada pelo cliente: {Method} {Path}",
                 context.Request.Method, context.Request.Path);
         }
+        catch (Exception ex) when (IsTransientFailure(ex))
+        {
+            // Falha transitória de infraestrutura (p.ex. Npgsql em pico de carga/freeze).
+            // Semântica de "tente de novo" em vez de 500: cliente pode retry/backoff.
+            _logger.LogWarning("Falha transitória de infraestrutura em {Method} {Path}: {Message}",
+                context.Request.Method, context.Request.Path, ex.Message);
+            context.Response.Headers.RetryAfter = "5";
+            await WriteProblemDetails(context, StatusCodes.Status503ServiceUnavailable,
+                "Serviço Indisponível", "Falha temporária de infraestrutura. Tente novamente em instantes.",
+                "SERVICE_UNAVAILABLE");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro não tratado");
             await WriteProblemDetails(context, StatusCodes.Status500InternalServerError,
                 "Internal Server Error", "Ocorreu um erro inesperado.", "INTERNAL_ERROR");
         }
+    }
+
+    /// <summary>
+    /// Detecta falhas de conexão/timeout nas dependências (Npgsql, socket, timeout genérico)
+    /// percorrendo a cadeia de inner exceptions — inclusive o wrapper "transient failure" do EF.
+    /// </summary>
+    private static bool IsTransientFailure(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is Npgsql.NpgsqlException
+                or TimeoutException
+                or System.Net.Sockets.SocketException)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static async Task WriteProblemDetails(
